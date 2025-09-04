@@ -34,7 +34,7 @@ const QRScanner = () => {
       const response = await attendanceService.getTodayMeal();
       setTodayMeal(response.data);
     } catch (error) {
-      console.error('Failed to fetch today\'s meal:', error);
+      // Error is handled silently as meal info is not critical
     }
   };
 
@@ -43,7 +43,7 @@ const QRScanner = () => {
       const response = await attendanceService.getAttendanceHistory({ limit: 5 });
       setAttendanceHistory(response.data.history);
     } catch (error) {
-      console.error('Failed to fetch attendance history:', error);
+      // Error is handled silently as history is not critical
     }
   };
 
@@ -57,7 +57,6 @@ const QRScanner = () => {
           });
         },
         (error) => {
-          console.error('Location error:', error);
           toast.error('Please enable location services for attendance tracking');
         }
       );
@@ -114,8 +113,7 @@ const QRScanner = () => {
   };
 
   const onScanFailure = (error) => {
-    // Silent fail for scanning attempts
-    console.log('Scan attempt failed:', error);
+    // Silent fail for scanning attempts - normal QR scanning behavior
   };
 
   const stopScanning = () => {

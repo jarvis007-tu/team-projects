@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const moment = require('moment');
 const logger = require('../utils/logger');
 const { generateQRData, verifyQRCode } = require('../services/qrService');
-const redisClient = require('../config/redis-optional');
+const { redisClient } = require('../config/redis-optional');
 
 class QRController {
   // Generate QR code for meal
@@ -32,13 +32,19 @@ class QRController {
         width: 300
       });
 
-      // Store in Redis with expiry
+      // Store in Redis with expiry (if available)
       const key = `qr:${meal_type}:${mealDate}`;
-      await redisClient.setex(
-        key,
-        validity_minutes * 60,
-        JSON.stringify(qrData)
-      );
+      try {
+        if (redisClient && redisClient.isReady) {
+          await redisClient.setex(
+            key,
+            validity_minutes * 60,
+            JSON.stringify(qrData)
+          );
+        }
+      } catch (redisError) {
+        logger.warn('Redis storage failed for QR code, continuing without cache:', redisError.message);
+      }
 
       res.json({
         success: true,
@@ -69,9 +75,17 @@ class QRController {
       const qrCodes = {};
 
       for (const mealType of mealTypes) {
-        // Check if QR exists in Redis
+        // Check if QR exists in Redis (if available)
         const key = `qr:${mealType}:${targetDate}`;
-        const existingQR = await redisClient.get(key);
+        let existingQR = null;
+        
+        try {
+          if (redisClient && redisClient.isReady) {
+            existingQR = await redisClient.get(key);
+          }
+        } catch (redisError) {
+          logger.debug('Redis get failed, continuing without cache:', redisError.message);
+        }
 
         if (existingQR) {
           const qrData = JSON.parse(existingQR);
@@ -106,12 +120,18 @@ class QRController {
             width: 300
           });
 
-          // Store in Redis
-          await redisClient.setex(
-            key,
-            getMealValidityMinutes(mealType) * 60,
-            JSON.stringify(qrData)
-          );
+          // Store in Redis (if available)
+          try {
+            if (redisClient && redisClient.isReady) {
+              await redisClient.setex(
+                key,
+                getMealValidityMinutes(mealType) * 60,
+                JSON.stringify(qrData)
+              );
+            }
+          } catch (redisError) {
+            logger.debug('Redis setex failed, continuing without cache:', redisError.message);
+          }
 
           qrCodes[mealType] = {
             code: qrData.code,

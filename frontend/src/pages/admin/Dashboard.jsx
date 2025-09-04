@@ -51,42 +51,30 @@ const Dashboard = () => {
     try {
       setLoading(true);
       
-      // Check if using mock authentication (development mode)
-      const isUsingMockAuth = localStorage.getItem('accessToken')?.startsWith('mock_');
-      
-      if (isUsingMockAuth) {
-        // Use mock data for development
-        setStats({
-          totalUsers: 250,
-          activeSubscriptions: 180,
-          monthlyRevenue: '35,500',
-          todayAttendance: 156
-        });
-        setRecentActivity([]);
-        setAttendanceData([]);
-        setSubscriptionData([]);
-      } else {
-        // Fetch real data from API
-        const [statsRes, activityRes, attendanceRes, subscriptionRes] = await Promise.all([
-          dashboardService.getStats(),
-          dashboardService.getRecentActivity(),
-          dashboardService.getAttendanceStats(),
-          dashboardService.getSubscriptionStats()
-        ]);
+      // Fetch real data from API
+      const [statsRes, activityRes, attendanceRes, subscriptionRes] = await Promise.all([
+        dashboardService.getDashboardStats(),
+        dashboardService.getRecentActivity(),
+        dashboardService.getAttendanceStats(),
+        dashboardService.getSubscriptionStats()
+      ]);
 
-        setStats(statsRes);
-        setRecentActivity(activityRes);
-        setAttendanceData(attendanceRes);
-        setSubscriptionData(subscriptionRes);
-      }
+      setStats(statsRes.data);
+      setRecentActivity(activityRes.data);
+      setAttendanceData(attendanceRes.data);
+      setSubscriptionData(subscriptionRes.data);
     } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
+      // Log error silently in production
+      if (process.env.NODE_ENV === 'development') {
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch dashboard data:', error);
+      }
       // Set default data on error to prevent empty dashboard
       setStats({
-        totalUsers: 250,
-        activeSubscriptions: 180,
-        monthlyRevenue: '35,500',
-        todayAttendance: 156
+        totalUsers: 0,
+        activeSubscriptions: 0,
+        monthlyRevenue: '0',
+        todayAttendance: 0
       });
       setRecentActivity([]);
       setAttendanceData([]);

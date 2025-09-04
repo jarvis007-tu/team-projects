@@ -142,8 +142,14 @@ class AuthController {
         }
       });
 
-      // Cache user data
-      await redisClient.set(`user:${user.user_id}`, user.toJSON(), 300);
+      // Cache user data (if Redis is available)
+      try {
+        if (redisClient && redisClient.isReady) {
+          await redisClient.set(`user:${user.user_id}`, JSON.stringify(user.toJSON()), 300);
+        }
+      } catch (cacheError) {
+        logger.debug('Redis cache failed during login:', cacheError.message);
+      }
 
       // Log successful login
       logger.info(`User login successful: ${user.user_id} - ${user.email}`);
@@ -220,8 +226,14 @@ class AuthController {
       // Remove refresh token
       await jwtManager.removeRefreshToken(user.user_id);
 
-      // Clear user cache
-      await redisClient.del(`user:${user.user_id}`);
+      // Clear user cache (if Redis is available)
+      try {
+        if (redisClient && redisClient.isReady) {
+          await redisClient.del(`user:${user.user_id}`);
+        }
+      } catch (cacheError) {
+        logger.debug('Redis cache clear failed during logout:', cacheError.message);
+      }
 
       logger.info(`User logout: ${user.user_id} - ${user.email}`);
 
@@ -300,14 +312,28 @@ class AuthController {
       const resetToken = crypto.randomBytes(32).toString('hex');
       const resetTokenExpiry = Date.now() + 3600000; // 1 hour
 
-      // Store in Redis
-      await redisClient.set(
-        `password_reset:${resetToken}`,
-        { userId: user.user_id, email: user.email },
-        3600
-      );
+      // Store in Redis (if available)
+      try {
+        if (redisClient && redisClient.isReady) {
+          await redisClient.set(
+            `password_reset:${resetToken}`,
+            JSON.stringify({ userId: user.user_id, email: user.email }),
+            3600
+          );
+        }
+      } catch (redisError) {
+        logger.error('Failed to store reset token:', redisError.message);
+        throw new AppError('Unable to process password reset request', 500);
+      }
 
-      // TODO: Send email with reset link
+      // Send email with reset link
+      try {
+        const emailService = require('../utils/emailService');
+        await emailService.sendPasswordResetEmail(user.email, resetToken);
+      } catch (emailError) {
+        logger.error('Failed to send reset email:', emailError.message);
+      }
+      
       logger.info(`Password reset requested for: ${user.email}`);
 
       res.json({
@@ -329,8 +355,16 @@ class AuthController {
         throw new AppError('Reset token and new password required', 400);
       }
 
-      // Get reset data from Redis
-      const resetData = await redisClient.get(`password_reset:${resetToken}`);
+      // Get reset data from Redis (if available)
+      let resetData = null;
+      try {
+        if (redisClient && redisClient.isReady) {
+          const data = await redisClient.get(`password_reset:${resetToken}`);
+          resetData = data ? JSON.parse(data) : null;
+        }
+      } catch (redisError) {
+        logger.debug('Redis get failed for reset token:', redisError.message);
+      }
       
       if (!resetData) {
         throw new AppError('Invalid or expired reset token', 400);
@@ -349,8 +383,14 @@ class AuthController {
       user.locked_until = null;
       await user.save();
 
-      // Delete reset token
-      await redisClient.del(`password_reset:${resetToken}`);
+      // Delete reset token (if Redis is available)
+      try {
+        if (redisClient && redisClient.isReady) {
+          await redisClient.del(`password_reset:${resetToken}`);
+        }
+      } catch (redisError) {
+        logger.debug('Redis delete failed for reset token:', redisError.message);
+      }
 
       // Remove all tokens for this user
       await jwtManager.removeRefreshToken(user.user_id);
@@ -412,8 +452,14 @@ class AuthController {
 
       await user.save();
 
-      // Clear cache
-      await redisClient.del(`user:${userId}`);
+      // Clear cache (if Redis is available)
+      try {
+        if (redisClient && redisClient.isReady) {
+          await redisClient.del(`user:${userId}`);
+        }
+      } catch (cacheError) {
+        logger.debug('Redis cache clear failed during profile update:', cacheError.message);
+      }
 
       res.json({
         success: true,

@@ -18,6 +18,11 @@ router.delete('/:id', authenticate, authorize('admin'), notificationController.d
 router.get('/stats', authenticate, authorize('admin'), notificationController.getNotificationStats);
 
 // Additional routes for missing endpoints
+router.post('/targeted', authenticate, authorize('admin'), notificationController.sendTargetedNotification);
+router.post('/schedule', authenticate, authorize('admin'), notificationController.scheduleNotification);
+router.delete('/scheduled/:id', authenticate, authorize('admin'), notificationController.cancelScheduledNotification);
+router.patch('/:id/status', authenticate, authorize('admin'), notificationController.updateNotificationStatus);
+router.get('/export', authenticate, authorize('admin'), notificationController.exportNotificationHistory);
 router.get('/templates', authenticate, authorize('admin'), notificationController.getNotificationTemplates);
 router.post('/templates', authenticate, authorize('admin'), notificationController.createNotificationTemplate);
 router.put('/templates/:id', authenticate, authorize('admin'), notificationController.updateNotificationTemplate);

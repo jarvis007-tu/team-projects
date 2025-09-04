@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const { sequelize } = require('../config/database');
 const { User, Subscription, Attendance, WeeklyMenu } = require('../models');
 const moment = require('moment');
 const logger = require('../utils/logger');
@@ -39,8 +40,16 @@ class DashboardController {
         }
       });
       
-      // Calculate revenue (mock data for now)
-      const monthlyRevenue = activeSubscriptions * 3000; // Assuming 3000 per subscription
+      // Calculate actual revenue from active subscriptions
+      const activeSubscriptionsWithAmount = await Subscription.findAll({
+        where: {
+          status: 'active',
+          end_date: { [Op.gte]: today.toDate() }
+        },
+        attributes: [[sequelize.fn('SUM', sequelize.col('amount')), 'total']]
+      });
+      
+      const monthlyRevenue = activeSubscriptionsWithAmount[0]?.dataValues?.total || 0;
       
       res.json({
         success: true,

@@ -24,7 +24,7 @@ const Notification = sequelize.define('Notification', {
     allowNull: false
   },
   type: {
-    type: DataTypes.ENUM('announcement', 'subscription', 'menu', 'payment', 'reminder', 'system'),
+    type: DataTypes.ENUM('announcement', 'subscription', 'menu', 'payment', 'reminder', 'system', 'test'),
     defaultValue: 'announcement'
   },
   priority: {
@@ -46,6 +46,22 @@ const Notification = sequelize.define('Notification', {
   sent_at: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW
+  },
+  created_by: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'user_id'
+    }
+  },
+  scheduled_time: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  status: {
+    type: DataTypes.ENUM('pending', 'sent', 'scheduled', 'failed'),
+    defaultValue: 'sent'
   }
 }, {
   tableName: 'notifications',

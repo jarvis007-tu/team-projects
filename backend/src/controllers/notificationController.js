@@ -26,7 +26,7 @@ class NotificationController {
           as: 'user',
           attributes: ['user_id', 'full_name', 'email']
         }],
-        order: [['createdAt', 'DESC']]
+        order: [['created_at', 'DESC']]
       });
 
       res.json({
@@ -52,7 +52,8 @@ class NotificationController {
   // Get user notifications
   async getUserNotifications(req, res) {
     try {
-      const userId = req.user.id;
+      logger.debug('User object:', req.user);
+      const userId = req.user.user_id;
       const { page = 1, limit = 10, is_read } = req.query;
       const offset = (page - 1) * limit;
 
@@ -107,7 +108,7 @@ class NotificationController {
   async createNotification(req, res) {
     try {
       const { title, message, type = 'announcement', user_id, priority = 'medium' } = req.body;
-      const createdBy = req.user.id;
+      const createdBy = req.user.user_id;
 
       // Create notification
       const notification = await Notification.create({
@@ -172,7 +173,7 @@ class NotificationController {
   async markAsRead(req, res) {
     try {
       const { id } = req.params;
-      const userId = req.user.id;
+      const userId = req.user.user_id;
 
       const notification = await Notification.findOne({
         where: {
@@ -212,7 +213,7 @@ class NotificationController {
   // Mark all notifications as read
   async markAllAsRead(req, res) {
     try {
-      const userId = req.user.id;
+      const userId = req.user.user_id;
 
       await Notification.update(
         {
@@ -276,7 +277,7 @@ class NotificationController {
   async sendBulkNotifications(req, res) {
     try {
       const { title, message, type = 'announcement', priority = 'medium', recipient_criteria } = req.body;
-      const createdBy = req.user.id;
+      const createdBy = req.user.user_id;
 
       let recipients = [];
 
@@ -321,7 +322,8 @@ class NotificationController {
             user_id: recipient.user_id,
             priority,
             created_by: createdBy,
-            createdAt: new Date()
+            created_at: new Date(),
+            updated_at: new Date()
           });
         }
       } else {

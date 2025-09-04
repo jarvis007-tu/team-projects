@@ -1,121 +1,21 @@
 import api from './api.js';
 
-// Mock notifications data
-const mockNotifications = [
-  {
-    notification_id: '1',
-    title: 'Menu Updated',
-    message: 'This week\'s menu has been updated with new special dishes.',
-    type: 'info',
-    category: 'Menu',
-    is_read: false,
-    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    action_url: '/user/menu',
-    action_text: 'View Menu'
-  },
-  {
-    notification_id: '2',
-    title: 'Subscription Expiring Soon',
-    message: 'Your meal subscription will expire in 7 days. Please renew to continue enjoying our services.',
-    type: 'warning',
-    category: 'Subscription',
-    is_read: false,
-    created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    action_url: '/user/subscription',
-    action_text: 'Renew Now'
-  },
-  {
-    notification_id: '3',
-    title: 'Meal Reminder',
-    message: 'Don\'t forget to mark your attendance for today\'s dinner.',
-    type: 'info',
-    category: 'Attendance',
-    is_read: true,
-    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    notification_id: '4',
-    title: 'Special Announcement',
-    message: 'Tomorrow we will be serving a special feast for the festival. Don\'t miss it!',
-    type: 'announcement',
-    category: 'Announcement',
-    is_read: false,
-    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    notification_id: '5',
-    title: 'Payment Successful',
-    message: 'Your payment for the monthly subscription has been received successfully.',
-    type: 'success',
-    category: 'Payment',
-    is_read: true,
-    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-  }
-];
-
-// Track notifications in memory
-let notifications = [...mockNotifications];
-
 const notificationService = {
-  // User notification methods with mock data
+  // User notification methods
   getMyNotifications: async (params = {}) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        let filtered = [...notifications];
-        
-        // Apply filters
-        if (params.filter === 'unread') {
-          filtered = filtered.filter(n => !n.is_read);
-        } else if (params.filter && params.filter !== 'all') {
-          filtered = filtered.filter(n => n.type === params.filter);
-        }
-        
-        // Sort by date (newest first)
-        filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        
-        resolve({
-          data: {
-            notifications: filtered,
-            unread_count: notifications.filter(n => !n.is_read).length,
-            total_count: filtered.length
-          }
-        });
-      }, 300);
-    });
+    return api.get('/notifications/my-notifications', { params });
   },
 
   // Mark notification as read
   markAsRead: async (notificationId) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const index = notifications.findIndex(n => n.notification_id === notificationId);
-        if (index !== -1) {
-          notifications[index].is_read = true;
-        }
-        resolve({ success: true });
-      }, 200);
-    });
+    return api.put(`/notifications/${notificationId}/read`);
   },
 
   // Mark all notifications as read
   markAllAsRead: async () => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        notifications = notifications.map(n => ({ ...n, is_read: true }));
-        resolve({ success: true });
-      }, 200);
-    });
+    return api.put('/notifications/mark-all-read');
   },
 
-  // Delete notification (user)
-  deleteNotification: async (notificationId) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        notifications = notifications.filter(n => n.notification_id !== notificationId);
-        resolve({ success: true });
-      }, 200);
-    });
-  },
   // Get all notifications
   getAllNotifications: (params = {}) => {
     return api.get('/notifications', { params });

@@ -258,7 +258,8 @@ const notificationExtensions = {
         message,
         type,
         priority: 'low',
-        is_read: false
+        is_read: false,
+        created_by: req.user.user_id
       });
 
       res.json({
@@ -271,6 +272,212 @@ const notificationExtensions = {
       res.status(500).json({
         success: false,
         message: 'Failed to send test notification'
+      });
+    }
+  },
+
+  // Send targeted notification
+  async sendTargetedNotification(req, res) {
+    try {
+      const { user_ids, title, message, type = 'announcement', priority = 'medium' } = req.body;
+      const createdBy = req.user.user_id;
+
+      if (!user_ids || !Array.isArray(user_ids) || user_ids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'User IDs array is required'
+        });
+      }
+
+      const notifications = await Promise.all(
+        user_ids.map(userId => 
+          Notification.create({
+            user_id: userId,
+            title,
+            message,
+            type,
+            priority,
+            created_by: createdBy,
+            status: 'sent'
+          })
+        )
+      );
+
+      res.json({
+        success: true,
+        message: `Targeted notifications sent to ${user_ids.length} users`,
+        data: notifications
+      });
+    } catch (error) {
+      logger.error('Error sending targeted notification:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to send targeted notification'
+      });
+    }
+  },
+
+  // Schedule notification
+  async scheduleNotification(req, res) {
+    try {
+      const { user_id, title, message, type = 'announcement', priority = 'medium', scheduled_time } = req.body;
+      const createdBy = req.user.user_id;
+
+      if (!scheduled_time) {
+        return res.status(400).json({
+          success: false,
+          message: 'Scheduled time is required'
+        });
+      }
+
+      const scheduledDate = new Date(scheduled_time);
+      if (scheduledDate <= new Date()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Scheduled time must be in the future'
+        });
+      }
+
+      const notification = await Notification.create({
+        user_id,
+        title,
+        message,
+        type,
+        priority,
+        created_by: createdBy,
+        scheduled_time: scheduledDate,
+        status: 'scheduled'
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Notification scheduled successfully',
+        data: notification
+      });
+    } catch (error) {
+      logger.error('Error scheduling notification:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to schedule notification'
+      });
+    }
+  },
+
+  // Cancel scheduled notification
+  async cancelScheduledNotification(req, res) {
+    try {
+      const { id } = req.params;
+
+      const notification = await Notification.findOne({
+        where: {
+          notification_id: id,
+          status: 'scheduled'
+        }
+      });
+
+      if (!notification) {
+        return res.status(404).json({
+          success: false,
+          message: 'Scheduled notification not found'
+        });
+      }
+
+      await notification.update({ status: 'failed' });
+
+      res.json({
+        success: true,
+        message: 'Scheduled notification cancelled successfully'
+      });
+    } catch (error) {
+      logger.error('Error cancelling scheduled notification:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to cancel scheduled notification'
+      });
+    }
+  },
+
+  // Update notification status
+  async updateNotificationStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!['pending', 'sent', 'scheduled', 'failed'].includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid status'
+        });
+      }
+
+      const notification = await Notification.findByPk(id);
+
+      if (!notification) {
+        return res.status(404).json({
+          success: false,
+          message: 'Notification not found'
+        });
+      }
+
+      await notification.update({ status });
+
+      res.json({
+        success: true,
+        message: 'Notification status updated successfully',
+        data: notification
+      });
+    } catch (error) {
+      logger.error('Error updating notification status:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update notification status'
+      });
+    }
+  },
+
+  // Export notification history
+  async exportNotificationHistory(req, res) {
+    try {
+      const { start_date, end_date, type } = req.query;
+      
+      const whereConditions = {};
+      
+      if (start_date && end_date) {
+        whereConditions.created_at = {
+          [Op.between]: [start_date, end_date]
+        };
+      }
+      
+      if (type) {
+        whereConditions.type = type;
+      }
+
+      const notifications = await Notification.findAll({
+        where: whereConditions,
+        include: [{
+          model: User,
+          as: 'user',
+          attributes: ['user_id', 'full_name', 'email']
+        }],
+        order: [['created_at', 'DESC']]
+      });
+
+      // Convert to CSV format
+      const csvHeader = 'ID,Title,Message,Type,Priority,User,Status,Created At,Read At\n';
+      const csvData = notifications.map(n => 
+        `${n.notification_id},"${n.title}","${n.message}",${n.type},${n.priority},"${n.user ? n.user.full_name : 'Broadcast'}",${n.status || 'sent'},${n.created_at},${n.read_at || ''}`
+      ).join('\n');
+
+      const csv = csvHeader + csvData;
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=notification-history.csv');
+      res.send(csv);
+    } catch (error) {
+      logger.error('Error exporting notification history:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to export notification history'
       });
     }
   }

@@ -37,11 +37,11 @@ const WeeklyMenu = () => {
 
   const getTodaysMeals = () => {
     const today = daysOfWeek[new Date().getDay() === 0 ? 6 : new Date().getDay() - 1];
-    return weeklyMenu.find(day => day.day === today) || null;
+    return weeklyMenu?.find(day => day.day === today) || null;
   };
 
   const getSelectedDayMenu = () => {
-    return weeklyMenu.find(day => day.day === daysOfWeek[selectedDay === 0 ? 6 : selectedDay - 1]) || null;
+    return weeklyMenu?.find(day => day.day === daysOfWeek[selectedDay === 0 ? 6 : selectedDay - 1]) || null;
   };
 
   const isToday = (dayIndex) => {

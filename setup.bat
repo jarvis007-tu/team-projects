@@ -28,26 +28,26 @@ if errorlevel 1 (
 
 call npm run db:migrate
 if errorlevel 1 (
-    echo Error running migrations!
+    echo Error running migrations! 
     pause
     exit /b 1
 )
 
-call npm run db:seed
+call npm run db:seed 
 if errorlevel 1 (
     echo Error seeding database!
     pause
     exit /b 1
 )
 echo Database setup completed!
-echo.
+echo. 
 
 echo Step 3: Installing frontend dependencies...
 cd ../frontend
-call npm install
+call npm install 
 if errorlevel 1 (
     echo Error installing frontend dependencies!
-    pause
+    pause 
     exit /b 1
 )
 echo Frontend dependencies installed successfully!

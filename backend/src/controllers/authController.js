@@ -69,8 +69,11 @@ class AuthController {
 
   async login(req, res, next) {
     try {
+      console.log(".................................")
       const { email, phone, password } = req.body;
       const deviceId = req.headers['x-device-id'];
+
+      console.log(".....................", req.body);
 
       if (!password || (!email && !phone)) {
         throw new AppError('Email/Phone and password are required', 400);

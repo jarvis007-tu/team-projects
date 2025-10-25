@@ -67,6 +67,16 @@ MealConfirmationSchema.methods.toJSON = function() {
     delete confirmationObject._id;
   }
 
+  // Rename timestamps from camelCase to snake_case for frontend compatibility
+  if (confirmationObject.createdAt) {
+    confirmationObject.created_at = confirmationObject.createdAt;
+    delete confirmationObject.createdAt;
+  }
+  if (confirmationObject.updatedAt) {
+    confirmationObject.updated_at = confirmationObject.updatedAt;
+    delete confirmationObject.updatedAt;
+  }
+
   // Convert user_id ObjectId to string
   if (confirmationObject.user_id) {
     confirmationObject.user_id = confirmationObject.user_id.toString();

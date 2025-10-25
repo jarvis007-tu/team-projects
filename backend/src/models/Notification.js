@@ -83,7 +83,7 @@ NotificationSchema.methods.markAsRead = async function() {
   await this.save();
 };
 
-// Override toJSON to rename _id to notification_id
+// Override toJSON to rename _id to notification_id and timestamps
 NotificationSchema.methods.toJSON = function() {
   const notificationObject = this.toObject();
   delete notificationObject.__v;
@@ -92,6 +92,16 @@ NotificationSchema.methods.toJSON = function() {
   if (notificationObject._id) {
     notificationObject.notification_id = notificationObject._id;
     delete notificationObject._id;
+  }
+
+  // Rename timestamps from camelCase to snake_case for frontend compatibility
+  if (notificationObject.createdAt) {
+    notificationObject.created_at = notificationObject.createdAt;
+    delete notificationObject.createdAt;
+  }
+  if (notificationObject.updatedAt) {
+    notificationObject.updated_at = notificationObject.updatedAt;
+    delete notificationObject.updatedAt;
   }
 
   // Convert ObjectId references to strings

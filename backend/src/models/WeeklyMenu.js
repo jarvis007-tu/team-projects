@@ -146,6 +146,16 @@ WeeklyMenuSchema.methods.toJSON = function() {
     delete menuObject._id;
   }
 
+  // Rename timestamps from camelCase to snake_case for frontend compatibility
+  if (menuObject.createdAt) {
+    menuObject.created_at = menuObject.createdAt;
+    delete menuObject.createdAt;
+  }
+  if (menuObject.updatedAt) {
+    menuObject.updated_at = menuObject.updatedAt;
+    delete menuObject.updatedAt;
+  }
+
   // Convert created_by ObjectId to string
   if (menuObject.created_by && typeof menuObject.created_by === 'object' && menuObject.created_by._id) {
     // Already populated, keep as is

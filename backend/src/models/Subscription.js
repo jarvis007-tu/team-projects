@@ -198,6 +198,16 @@ SubscriptionSchema.methods.toJSON = function() {
     delete subscriptionObject._id;
   }
 
+  // Rename timestamps from camelCase to snake_case for frontend compatibility
+  if (subscriptionObject.createdAt) {
+    subscriptionObject.created_at = subscriptionObject.createdAt;
+    delete subscriptionObject.createdAt;
+  }
+  if (subscriptionObject.updatedAt) {
+    subscriptionObject.updated_at = subscriptionObject.updatedAt;
+    delete subscriptionObject.updatedAt;
+  }
+
   // Convert user_id ObjectId to string for frontend
   if (subscriptionObject.user_id) {
     subscriptionObject.user_id = subscriptionObject.user_id.toString();

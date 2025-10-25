@@ -251,6 +251,16 @@ AttendanceSchema.methods.toJSON = function() {
     delete attendanceObject._id;
   }
 
+  // Rename timestamps from camelCase to snake_case for frontend compatibility
+  if (attendanceObject.createdAt) {
+    attendanceObject.created_at = attendanceObject.createdAt;
+    delete attendanceObject.createdAt;
+  }
+  if (attendanceObject.updatedAt) {
+    attendanceObject.updated_at = attendanceObject.updatedAt;
+    delete attendanceObject.updatedAt;
+  }
+
   // Convert ObjectId references to strings
   if (attendanceObject.user_id) {
     attendanceObject.user_id = attendanceObject.user_id.toString();

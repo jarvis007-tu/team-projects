@@ -180,6 +180,16 @@ UserSchema.methods.toJSON = function() {
     delete userObject._id;
   }
 
+  // Rename timestamps from camelCase to snake_case for frontend compatibility
+  if (userObject.createdAt) {
+    userObject.created_at = userObject.createdAt;
+    delete userObject.createdAt;
+  }
+  if (userObject.updatedAt) {
+    userObject.updated_at = userObject.updatedAt;
+    delete userObject.updatedAt;
+  }
+
   return userObject;
 };
 

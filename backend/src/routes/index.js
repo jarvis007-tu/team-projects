@@ -4,6 +4,7 @@ const router = express.Router();
 // Import all route modules
 const authRoutes = require('./authRoutes');
 const userRoutes = require('./userRoutes');
+const messRoutes = require('./messRoutes');
 const subscriptionRoutes = require('./subscriptionRoutes');
 const attendanceRoutes = require('./attendanceRoutes');
 const menuRoutes = require('./menuRoutes');
@@ -36,6 +37,7 @@ router.get('/version', (req, res) => {
 // Mount route modules
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
+router.use('/messes', messRoutes);
 router.use('/subscriptions', subscriptionRoutes);
 router.use('/attendance', attendanceRoutes);
 router.use('/menu', menuRoutes);

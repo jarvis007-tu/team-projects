@@ -6,6 +6,12 @@ const MealConfirmationSchema = new mongoose.Schema({
     ref: 'User',
     required: [true, 'User ID is required']
   },
+  mess_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Mess',
+    required: [true, 'Mess ID is required'],
+    index: true
+  },
   meal_date: {
     type: Date,
     required: [true, 'Meal date is required']

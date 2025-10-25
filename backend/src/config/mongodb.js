@@ -12,8 +12,6 @@ class MongoDBConnection {
       const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/hostel_mess_db';
 
       const options = {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
         maxPoolSize: parseInt(process.env.DB_POOL_MAX) || 10,
         minPoolSize: parseInt(process.env.DB_POOL_MIN) || 2,
         serverSelectionTimeoutMS: 60000,

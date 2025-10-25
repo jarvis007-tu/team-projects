@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const Mess = require('../models/Mess');
 const Subscription = require('../models/Subscription');
 const logger = require('../utils/logger');
 const { uploadToS3 } = require('../services/storageService');
@@ -9,10 +10,21 @@ class UserController {
   // Get all users (Admin only)
   async getAllUsers(req, res) {
     try {
-      const { page = 1, limit = 10, search, role, status } = req.query;
+      const { page = 1, limit = 10, search, role, status, mess_id } = req.query;
       const skip = (page - 1) * limit;
 
-      const queryConditions = {};
+      const queryConditions = { deleted_at: null };
+
+      // Mess filtering based on user role
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all messes or filter by specific mess
+        if (mess_id) {
+          queryConditions.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin and subscribers can only see their own mess users
+        queryConditions.mess_id = req.user.mess_id;
+      }
 
       if (search) {
         queryConditions.$or = [
@@ -28,6 +40,7 @@ class UserController {
       const [users, count] = await Promise.all([
         User.find(queryConditions)
           .select('-password')
+          .populate('mess_id', 'name code city')
           .limit(parseInt(limit))
           .skip(skip)
           .sort({ createdAt: -1 }),
@@ -61,6 +74,7 @@ class UserController {
 
       const user = await User.findById(id)
         .select('-password')
+        .populate('mess_id', 'name code city state address latitude longitude')
         .populate({
           path: 'subscriptions',
           match: { status: 'active' }
@@ -70,6 +84,25 @@ class UserController {
         return res.status(404).json({
           success: false,
           message: 'User not found'
+        });
+      }
+
+      // Check if user has permission to view this user
+      if (req.user.role !== 'super_admin' &&
+          req.user.role !== 'mess_admin' &&
+          req.user.id !== id) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have permission to view this user'
+        });
+      }
+
+      // Mess boundary check
+      if (req.user.role === 'mess_admin' &&
+          user.mess_id._id.toString() !== req.user.mess_id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have permission to view users from other messes'
         });
       }
 
@@ -89,7 +122,61 @@ class UserController {
   // Create new user (Admin only)
   async createUser(req, res) {
     try {
-      const { full_name, email, phone, role = 'subscriber', password } = req.body;
+      const { full_name, email, phone, role = 'subscriber', password, mess_id } = req.body;
+
+      // Determine which mess to assign user to
+      let targetMessId = mess_id;
+
+      if (req.user.role === 'super_admin') {
+        // Super admin must specify mess_id
+        if (!mess_id) {
+          return res.status(400).json({
+            success: false,
+            message: 'Mess selection is required'
+          });
+        }
+      } else if (req.user.role === 'mess_admin') {
+        // Mess admin can only create users for their own mess
+        targetMessId = req.user.mess_id;
+        if (mess_id && mess_id !== req.user.mess_id.toString()) {
+          return res.status(403).json({
+            success: false,
+            message: 'You can only create users for your own mess'
+          });
+        }
+      } else {
+        return res.status(403).json({
+          success: false,
+          message: 'Insufficient permissions to create users'
+        });
+      }
+
+      // Validate mess exists and is active
+      const mess = await Mess.findOne({
+        _id: targetMessId,
+        deleted_at: null
+      });
+
+      if (!mess) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid mess'
+        });
+      }
+
+      // Check mess capacity
+      const currentUserCount = await User.countDocuments({
+        mess_id: mess._id,
+        status: 'active',
+        deleted_at: null
+      });
+
+      if (currentUserCount >= mess.capacity) {
+        return res.status(400).json({
+          success: false,
+          message: `Mess has reached maximum capacity (${mess.capacity} users)`
+        });
+      }
 
       // Check if user already exists
       const existingUser = await User.findOne({
@@ -103,20 +190,21 @@ class UserController {
         });
       }
 
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
-
+      // Create user (password will be hashed by pre-save hook)
       const user = await User.create({
         full_name,
         email,
         phone,
         role,
-        password: hashedPassword,
+        mess_id: targetMessId,
+        password: password, // Don't hash here - let the pre-save hook handle it
         status: 'active'
       });
 
       const userResponse = user.toObject();
       delete userResponse.password;
+
+      logger.info(`User created: ${user._id} for mess ${mess.name} by admin ${req.user.id}`);
 
       res.status(201).json({
         success: true,
@@ -138,22 +226,45 @@ class UserController {
       const { id } = req.params;
       const updates = req.body;
 
-      // Remove sensitive fields
-      delete updates.password;
-      delete updates._id;
+      // Find user first for permission checks
+      const existingUser = await User.findById(id);
 
-      const user = await User.findByIdAndUpdate(
-        id,
-        updates,
-        { new: true, runValidators: true }
-      ).select('-password');
-
-      if (!user) {
+      if (!existingUser) {
         return res.status(404).json({
           success: false,
           message: 'User not found'
         });
       }
+
+      // Mess boundary check
+      if (req.user.role === 'mess_admin' &&
+          existingUser.mess_id.toString() !== req.user.mess_id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only update users from your own mess'
+        });
+      }
+
+      // Remove sensitive fields
+      delete updates._id;
+
+      // Only super_admin can change mess_id
+      if (updates.mess_id && req.user.role !== 'super_admin') {
+        delete updates.mess_id;
+      }
+
+      // Handle password update separately (will be hashed by pre-save hook)
+      if (updates.password) {
+        existingUser.password = updates.password;
+        delete updates.password;
+      }
+
+      // Update other fields
+      Object.assign(existingUser, updates);
+      await existingUser.save();
+
+      const user = existingUser.toObject();
+      delete user.password;
 
       res.json({
         success: true,
@@ -236,16 +347,15 @@ class UserController {
             continue;
           }
 
-          // Generate default password
+          // Generate default password (will be hashed by pre-save hook)
           const defaultPassword = `${phone}@hostel`;
-          const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
           await User.create({
             full_name,
             email,
             phone,
             role,
-            password: hashedPassword,
+            password: defaultPassword, // Don't hash here - let the pre-save hook handle it
             status: 'active'
           });
 
@@ -348,9 +458,8 @@ class UserController {
         });
       }
 
-      // Hash new password
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      user.password = hashedPassword;
+      // Set new password (will be hashed by pre-save hook)
+      user.password = newPassword;
       await user.save();
 
       res.json({

@@ -3,15 +3,20 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const logger = require('../utils/logger');
 const { sendPushNotification } = require('../services/firebaseService');
+const { addMessFilter } = require('../utils/messHelpers');
 
 class NotificationController {
   // Get all notifications (Admin)
   async getAllNotifications(req, res) {
     try {
-      const { page = 1, limit = 10, type, priority } = req.query;
+      const { page = 1, limit = 10, type, priority, mess_id } = req.query;
       const skip = (page - 1) * limit;
 
       const queryConditions = {};
+
+      // Add mess filtering
+      addMessFilter(queryConditions, req.user, mess_id);
+
       if (type) queryConditions.type = type;
       if (priority) queryConditions.priority = priority;
 
@@ -20,6 +25,7 @@ class NotificationController {
           .limit(parseInt(limit))
           .skip(skip)
           .populate('user_id', 'full_name email')
+          .populate('mess_id', 'name code')
           .sort({ created_at: -1 }),
         Notification.countDocuments(queryConditions)
       ]);
@@ -54,8 +60,9 @@ class NotificationController {
 
       const queryConditions = {
         $or: [
-          { user_id: userId },
-          { user_id: null } // Broadcast notifications
+          { user_id: userId, mess_id: req.user.mess_id },
+          { user_id: null, mess_id: req.user.mess_id }, // Mess-specific broadcast
+          { user_id: null, mess_id: null } // Global broadcast
         ]
       };
 

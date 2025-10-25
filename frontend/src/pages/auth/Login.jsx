@@ -271,8 +271,9 @@ const Login = () => {
               </p>
             </div>
             <div className="text-xs text-amber-700 dark:text-amber-300 space-y-1 pl-4">
-              <p className="font-mono">Admin: admin@hosteleats.com / admin123</p>
-              <p className="font-mono">User: user@hosteleats.com / user123</p>
+              <p className="font-mono">Super Admin: superadmin@hosteleats.com / admin123</p>
+              <p className="font-mono">Mess Admin: admin-a@hosteleats.com / admin123</p>
+              <p className="font-mono">User: user1@example.com / user123</p>
             </div>
           </motion.div>
         )}

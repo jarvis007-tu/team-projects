@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   HomeIcon,
   UsersIcon,
+  BuildingOfficeIcon,
   CreditCardIcon,
   ClipboardDocumentCheckIcon,
   CalendarDaysIcon,
@@ -28,6 +29,7 @@ const AdminLayout = () => {
 
   const navigation = [
     { name: 'Dashboard', href: '/admin/dashboard', icon: HomeIcon },
+    { name: 'Messes', href: '/admin/messes', icon: BuildingOfficeIcon },
     { name: 'Users', href: '/admin/users', icon: UsersIcon },
     { name: 'Subscriptions', href: '/admin/subscriptions', icon: CreditCardIcon },
     { name: 'Attendance', href: '/admin/attendance', icon: ClipboardDocumentCheckIcon },

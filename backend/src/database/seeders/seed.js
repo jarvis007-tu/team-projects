@@ -1,8 +1,13 @@
 require('dotenv').config();
 const { connectDB, disconnectDB } = require('../../config/mongodb');
-const { User, Subscription, WeeklyMenu, Notification, Attendance, MealConfirmation } = require('../../models');
-const logger = require('../../utils/logger');
+const { Mess, User, Subscription, WeeklyMenu, Notification, Attendance, MealConfirmation } = require('../../models');
 const moment = require('moment-timezone');
+
+// Use console.log instead of logger for seeding
+const logger = {
+  info: (msg) => console.log(`[INFO] ${msg}`),
+  error: (msg, ...args) => console.error(`[ERROR] ${msg}`, ...args)
+};
 
 async function seed() {
   try {
@@ -11,6 +16,7 @@ async function seed() {
     logger.info('Connected to MongoDB for seeding');
 
     // Clear existing data
+    await Mess.deleteMany({});
     await User.deleteMany({});
     await Subscription.deleteMany({});
     await Attendance.deleteMany({});
@@ -19,33 +25,117 @@ async function seed() {
     await MealConfirmation.deleteMany({});
     logger.info('Cleared existing data');
 
-    // Create admin user
-    const admin = await User.create({
-      full_name: 'System Administrator',
-      email: 'admin@hosteleats.com',
+    // Create sample messes
+    const mess1 = await Mess.create({
+      name: 'Hostel A Mess',
+      code: 'MESS-A',
+      address: 'Block A, University Campus',
+      city: 'Jaipur',
+      state: 'Rajasthan',
+      pincode: '302017',
+      latitude: 26.9124,
+      longitude: 75.7873,
+      radius_meters: 200,
+      contact_phone: '9876543210',
+      contact_email: 'mess-a@university.edu',
+      capacity: 500,
+      status: 'active',
+      settings: {
+        breakfast_start: '07:00',
+        breakfast_end: '10:00',
+        lunch_start: '12:00',
+        lunch_end: '15:00',
+        dinner_start: '19:00',
+        dinner_end: '22:00',
+        qr_validity_minutes: 30,
+        allow_meal_confirmation: true,
+        confirmation_deadline_hours: 2
+      },
+      description: 'Main mess serving hostel blocks A, B, and C'
+    });
+
+    const mess2 = await Mess.create({
+      name: 'Hostel B Mess',
+      code: 'MESS-B',
+      address: 'Block D, University Campus',
+      city: 'Jaipur',
+      state: 'Rajasthan',
+      pincode: '302017',
+      latitude: 26.9200,
+      longitude: 75.7900,
+      radius_meters: 150,
+      contact_phone: '9876543211',
+      contact_email: 'mess-b@university.edu',
+      capacity: 300,
+      status: 'active',
+      settings: {
+        breakfast_start: '07:30',
+        breakfast_end: '10:30',
+        lunch_start: '12:30',
+        lunch_end: '15:30',
+        dinner_start: '19:30',
+        dinner_end: '22:30',
+        qr_validity_minutes: 45,
+        allow_meal_confirmation: false
+      },
+      description: 'Secondary mess serving hostel blocks D and E'
+    });
+
+    logger.info('Created 2 sample messes');
+
+    // Create super admin user (can manage all messes)
+    const superAdmin = await User.create({
+      full_name: 'Super Administrator',
+      email: 'superadmin@hosteleats.com',
       phone: '9876543210',
-      password: 'admin123', // Will be hashed by the model hook
-      role: 'admin',
+      password: 'admin123',
+      mess_id: mess1._id, // Assign to first mess by default
+      role: 'super_admin',
       status: 'active',
       email_verified: true,
-      phone_verified: true,
-      preferences: {
-        notifications: true,
-        email_notifications: true,
-        sms_notifications: true,
-        meal_reminders: true
-      }
+      phone_verified: true
     });
-    logger.info('Created admin user');
+    logger.info('Created super admin user');
 
-    // Create test users
+    // Create mess admin for Mess A
+    const messAdmin1 = await User.create({
+      full_name: 'Mess A Admin',
+      email: 'admin-a@hosteleats.com',
+      phone: '9876543211',
+      password: 'admin123',
+      mess_id: mess1._id,
+      role: 'mess_admin',
+      status: 'active',
+      email_verified: true,
+      phone_verified: true
+    });
+
+    // Create mess admin for Mess B
+    const messAdmin2 = await User.create({
+      full_name: 'Mess B Admin',
+      email: 'admin-b@hosteleats.com',
+      phone: '9876543212',
+      password: 'admin123',
+      mess_id: mess2._id,
+      role: 'mess_admin',
+      status: 'active',
+      email_verified: true,
+      phone_verified: true
+    });
+    logger.info('Created mess admin users');
+
+    // Create test users - distribute between two messes
     const users = [];
     for (let i = 1; i <= 10; i++) {
+      // Assign users alternately to mess1 and mess2
+      const assignedMess = i % 2 === 0 ? mess2 : mess1;
+
       const user = await User.create({
         full_name: `Test User ${i}`,
         email: `user${i}@example.com`,
-        phone: `98765432${10 + i}`,
+        phone: `98765432${20 + i}`,
         password: 'user123',
+        mess_id: assignedMess._id,
         role: 'subscriber',
         status: 'active',
         email_verified: true,
@@ -59,7 +149,7 @@ async function seed() {
       });
       users.push(user);
     }
-    logger.info(`Created ${users.length} test users`);
+    logger.info(`Created ${users.length} test users (distributed across messes)`);
 
     // Create subscriptions for users
     const subscriptions = [];
@@ -69,6 +159,7 @@ async function seed() {
 
       const subscription = await Subscription.create({
         user_id: users[i]._id,
+        mess_id: users[i].mess_id, // Use user's assigned mess
         plan_type: ['daily', 'weekly', 'monthly'][i % 3],
         plan_name: `${['Daily', 'Weekly', 'Monthly'][i % 3]} Plan`,
         amount: [50, 300, 1000][i % 3],
@@ -127,39 +218,44 @@ async function seed() {
       ]
     };
 
-    for (const day of days) {
-      for (let mIndex = 0; mIndex < mealTypes.length; mIndex++) {
-        const mealType = mealTypes[mIndex];
-        const dayIndex = days.indexOf(day);
+    // Create menus for both messes
+    for (const mess of [mess1, mess2]) {
+      for (const day of days) {
+        for (let mIndex = 0; mIndex < mealTypes.length; mIndex++) {
+          const mealType = mealTypes[mIndex];
+          const dayIndex = days.indexOf(day);
 
-        await WeeklyMenu.create({
-          week_start_date: weekStart,
-          week_end_date: weekEnd,
-          day: day,
-          meal_type: mealType,
-          items: menuItems[mealType][dayIndex],
-          special_items: dayIndex % 2 === 0 ? ['Dessert'] : [],
-          nutritional_info: {
-            calories: mealType === 'breakfast' ? 400 : mealType === 'lunch' ? 600 : 500,
-            protein: mealType === 'breakfast' ? 10 : mealType === 'lunch' ? 20 : 15,
-            carbs: mealType === 'breakfast' ? 60 : mealType === 'lunch' ? 80 : 70,
-            fat: mealType === 'breakfast' ? 10 : mealType === 'lunch' ? 15 : 12,
-            fiber: mealType === 'breakfast' ? 5 : mealType === 'lunch' ? 8 : 6
-          },
-          is_veg: dayIndex !== 5, // Friday is non-veg
-          allergen_info: dayIndex % 3 === 0 ? ['nuts', 'dairy'] : [],
-          price: mealType === 'breakfast' ? 20 : mealType === 'lunch' ? 40 : 30,
-          created_by: admin._id,
-          is_active: true,
-          notes: `Weekly menu for ${day} ${mealType}`
-        });
+          await WeeklyMenu.create({
+            mess_id: mess._id,
+            week_start_date: weekStart,
+            week_end_date: weekEnd,
+            day: day,
+            meal_type: mealType,
+            items: menuItems[mealType][dayIndex],
+            special_items: dayIndex % 2 === 0 ? ['Dessert'] : [],
+            nutritional_info: {
+              calories: mealType === 'breakfast' ? 400 : mealType === 'lunch' ? 600 : 500,
+              protein: mealType === 'breakfast' ? 10 : mealType === 'lunch' ? 20 : 15,
+              carbs: mealType === 'breakfast' ? 60 : mealType === 'lunch' ? 80 : 70,
+              fat: mealType === 'breakfast' ? 10 : mealType === 'lunch' ? 15 : 12,
+              fiber: mealType === 'breakfast' ? 5 : mealType === 'lunch' ? 8 : 6
+            },
+            is_veg: dayIndex !== 5, // Friday is non-veg
+            allergen_info: dayIndex % 3 === 0 ? ['nuts', 'dairy'] : [],
+            price: mealType === 'breakfast' ? 20 : mealType === 'lunch' ? 40 : 30,
+            created_by: mess._id.toString() === mess1._id.toString() ? messAdmin1._id : messAdmin2._id,
+            is_active: true,
+            notes: `Weekly menu for ${mess.name} - ${day} ${mealType}`
+          });
+        }
       }
     }
-    logger.info('Created weekly menu');
+    logger.info('Created weekly menus for both messes');
 
     // Create sample notifications
     for (let i = 0; i < users.length; i++) {
       await Notification.create({
+        mess_id: users[i].mess_id,
         user_id: users[i]._id,
         title: 'Welcome to Hostel Mess System!',
         message: 'Thank you for subscribing to our meal plan. Enjoy delicious and nutritious meals every day.',
@@ -168,7 +264,7 @@ async function seed() {
         is_read: false,
         metadata: { user_type: 'new_user' },
         sent_at: new Date(),
-        created_by: admin._id,
+        created_by: superAdmin._id,
         status: 'sent'
       });
     }
@@ -183,7 +279,7 @@ async function seed() {
       is_read: false,
       metadata: { maintenance_type: 'scheduled' },
       sent_at: new Date(),
-      created_by: admin._id,
+      created_by: superAdmin._id,
       status: 'sent'
     });
     logger.info('Created notifications');
@@ -199,6 +295,7 @@ async function seed() {
         try {
           await Attendance.create({
             user_id: users[i]._id,
+            mess_id: users[i].mess_id,
             subscription_id: subscriptions[i]._id,
             scan_date: attendanceDate.toDate(),
             meal_type: mealType,
@@ -232,8 +329,14 @@ async function seed() {
 
     logger.info('Database seeding completed successfully!');
     logger.info('\n=== TEST CREDENTIALS ===');
-    logger.info('Admin:');
-    logger.info('  Email: admin@hosteleats.com');
+    logger.info('Super Admin (All Messes):');
+    logger.info('  Email: superadmin@hosteleats.com');
+    logger.info('  Password: admin123');
+    logger.info('\nMess A Admin:');
+    logger.info('  Email: admin-a@hosteleats.com');
+    logger.info('  Password: admin123');
+    logger.info('\nMess B Admin:');
+    logger.info('  Email: admin-b@hosteleats.com');
     logger.info('  Password: admin123');
     logger.info('\nTest User:');
     logger.info('  Email: user1@example.com');

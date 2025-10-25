@@ -6,8 +6,9 @@ const validateUserCreate = (req, res, next) => {
     email: Joi.string().email().required(),
     phone: Joi.string().pattern(/^[0-9]{10}$/).required(),
     password: Joi.string().min(6).required(),
-    role: Joi.string().valid('admin', 'subscriber').optional(),
-    status: Joi.string().valid('active', 'inactive').optional()
+    mess_id: Joi.string().optional(),
+    role: Joi.string().valid('super_admin', 'mess_admin', 'subscriber').optional(),
+    status: Joi.string().valid('active', 'inactive', 'suspended').optional()
   });
 
   const { error } = schema.validate(req.body);
@@ -25,8 +26,10 @@ const validateUserUpdate = (req, res, next) => {
     full_name: Joi.string().min(3).max(100).optional(),
     email: Joi.string().email().optional(),
     phone: Joi.string().pattern(/^[0-9]{10}$/).optional(),
-    role: Joi.string().valid('admin', 'subscriber').optional(),
-    status: Joi.string().valid('active', 'inactive').optional()
+    password: Joi.string().min(6).optional(),
+    mess_id: Joi.string().optional(),
+    role: Joi.string().valid('super_admin', 'mess_admin', 'subscriber').optional(),
+    status: Joi.string().valid('active', 'inactive', 'suspended').optional()
   });
 
   const { error } = schema.validate(req.body);

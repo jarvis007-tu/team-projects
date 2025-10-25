@@ -7,6 +7,12 @@ const SubscriptionSchema = new mongoose.Schema({
     ref: 'User',
     required: [true, 'User ID is required']
   },
+  mess_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Mess',
+    required: [true, 'Mess ID is required'],
+    index: true
+  },
   plan_type: {
     type: String,
     enum: {
@@ -97,11 +103,13 @@ const SubscriptionSchema = new mongoose.Schema({
 
 // Indexes
 SubscriptionSchema.index({ user_id: 1 });
+SubscriptionSchema.index({ mess_id: 1 });
 SubscriptionSchema.index({ status: 1 });
 SubscriptionSchema.index({ start_date: 1 });
 SubscriptionSchema.index({ end_date: 1 });
 SubscriptionSchema.index({ plan_type: 1 });
 SubscriptionSchema.index({ payment_status: 1 });
+SubscriptionSchema.index({ mess_id: 1, status: 1 }); // Composite index for mess filtering
 SubscriptionSchema.index({ user_id: 1, status: 1, start_date: 1, end_date: 1 }); // Composite index
 
 // Pre-save validation

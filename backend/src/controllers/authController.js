@@ -1,4 +1,4 @@
-const { User, Subscription } = require('../models');
+const { User, Subscription, Mess } = require('../models');
 const jwtManager = require('../utils/jwt');
 const { redisClient } = require('../config/redis-optional');
 const logger = require('../utils/logger');
@@ -9,11 +9,38 @@ const moment = require('moment-timezone');
 class AuthController {
   async register(req, res, next) {
     try {
-      const { full_name, email, phone, password, role = 'subscriber' } = req.body;
+      const { full_name, email, phone, password, mess_id, role = 'subscriber' } = req.body;
+
+      // Validate required fields
+      if (!mess_id) {
+        throw new AppError('Mess selection is required', 400);
+      }
 
       // Validate password strength
       if (password.length < 8) {
         throw new AppError('Password must be at least 8 characters long', 400);
+      }
+
+      // Validate mess exists and is active
+      const mess = await Mess.findOne({
+        _id: mess_id,
+        status: 'active',
+        deleted_at: null
+      });
+
+      if (!mess) {
+        throw new AppError('Invalid or inactive mess. Please select a valid mess.', 400);
+      }
+
+      // Check if mess has capacity
+      const currentUserCount = await User.countDocuments({
+        mess_id: mess._id,
+        status: 'active',
+        deleted_at: null
+      });
+
+      if (currentUserCount >= mess.capacity) {
+        throw new AppError('This mess has reached its maximum capacity. Please contact the administrator.', 400);
       }
 
       // Check if user exists
@@ -31,6 +58,7 @@ class AuthController {
         email,
         phone,
         password,
+        mess_id,
         role,
         device_id: req.headers['x-device-id'] || null
       });
@@ -74,7 +102,7 @@ class AuthController {
       }
 
       // Build query for email or phone
-      const query = {};
+      const query = { deleted_at: null };
       if (email && phone) {
         query.$or = [{ email }, { phone }];
       } else if (email) {
@@ -84,7 +112,7 @@ class AuthController {
       }
 
       // Find user - need password for validation
-      const user = await User.findOne(query).select('+password');
+      const user = await User.findOne(query).select('+password').populate('mess_id', 'name code');
 
       if (!user) {
         throw new AppError('Invalid credentials', 401);
@@ -128,10 +156,14 @@ class AuthController {
       // Store refresh token
       await jwtManager.storeRefreshToken(user._id.toString(), tokens.refreshToken);
 
+      // Get mess information
+      const mess = await Mess.findById(user.mess_id).select('name code city state address latitude longitude');
+
       // Get active subscription
       const today = moment().format('YYYY-MM-DD');
       const activeSubscription = await Subscription.findOne({
         user_id: user._id,
+        mess_id: user.mess_id,
         status: 'active',
         start_date: { $lte: new Date(today) },
         end_date: { $gte: new Date(today) }
@@ -147,13 +179,14 @@ class AuthController {
       }
 
       // Log successful login
-      logger.info(`User login successful: ${user._id} - ${user.email}`);
+      logger.info(`User login successful: ${user._id} - ${user.email} - Mess: ${mess?.name}`);
 
       res.json({
         success: true,
         message: 'Login successful',
         data: {
           user: user.toJSON(),
+          mess: mess ? mess.toJSON() : null,
           subscription: activeSubscription,
           tokens
         }

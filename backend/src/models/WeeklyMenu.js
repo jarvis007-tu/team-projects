@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 const moment = require('moment-timezone');
 
 const WeeklyMenuSchema = new mongoose.Schema({
+  mess_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Mess',
+    required: [true, 'Mess ID is required'],
+    index: true
+  },
   week_start_date: {
     type: Date,
     required: [true, 'Week start date is required']
@@ -90,7 +96,7 @@ WeeklyMenuSchema.index({ week_start_date: 1, week_end_date: 1 });
 WeeklyMenuSchema.index({ day: 1 });
 WeeklyMenuSchema.index({ meal_type: 1 });
 WeeklyMenuSchema.index({ is_active: 1 });
-WeeklyMenuSchema.index({ week_start_date: 1, day: 1, meal_type: 1 }, { unique: true }); // Unique constraint
+WeeklyMenuSchema.index({ mess_id: 1, week_start_date: 1, day: 1, meal_type: 1 }, { unique: true }); // Unique constraint per mess
 
 // Static method to get current week menu
 WeeklyMenuSchema.statics.getCurrentWeekMenu = async function() {

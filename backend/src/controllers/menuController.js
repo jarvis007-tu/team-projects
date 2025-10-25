@@ -1,18 +1,24 @@
 const moment = require('moment');
 const WeeklyMenu = require('../models/WeeklyMenu');
 const logger = require('../utils/logger');
+const { addMessFilter } = require('../utils/messHelpers');
 
 class MenuController {
   // Get weekly menu
   async getWeeklyMenu(req, res) {
     try {
-      const { week_start_date, is_active = true } = req.query;
+      const { week_start_date, is_active = true, mess_id } = req.query;
 
-      const queryConditions = {};
+      const queryConditions = { deleted_at: null };
+
+      // Add mess filtering
+      addMessFilter(queryConditions, req.user, mess_id);
+
       if (is_active !== undefined) queryConditions.is_active = is_active === 'true';
       if (week_start_date) queryConditions.week_start_date = week_start_date;
 
       const menu = await WeeklyMenu.find(queryConditions)
+        .populate('mess_id', 'name code')
         .sort({ day: 1, meal_type: 1 });
 
       // Group by day
@@ -20,8 +26,20 @@ class MenuController {
         if (!acc[item.day]) {
           acc[item.day] = {};
         }
+
+        // Handle both string and already parsed items
+        let items = item.items;
+        if (typeof items === 'string') {
+          try {
+            items = JSON.parse(items);
+          } catch (e) {
+            logger.error('Error parsing menu items:', e);
+            items = [];
+          }
+        }
+
         acc[item.day][item.meal_type] = {
-          items: JSON.parse(item.items),
+          items: items,
           special_note: item.special_note
         };
         return acc;
@@ -44,15 +62,35 @@ class MenuController {
   async getTodayMenu(req, res) {
     try {
       const today = moment().format('dddd').toLowerCase();
+      const { mess_id } = req.query;
 
-      const menu = await WeeklyMenu.find({
+      const queryConditions = {
         day: today,
-        is_active: true
-      }).sort({ meal_type: 1 });
+        is_active: true,
+        deleted_at: null
+      };
+
+      // Add mess filtering
+      addMessFilter(queryConditions, req.user, mess_id);
+
+      const menu = await WeeklyMenu.find(queryConditions)
+        .populate('mess_id', 'name code')
+        .sort({ meal_type: 1 });
 
       const todayMenu = menu.reduce((acc, item) => {
+        // Handle both string and already parsed items
+        let items = item.items;
+        if (typeof items === 'string') {
+          try {
+            items = JSON.parse(items);
+          } catch (e) {
+            logger.error('Error parsing menu items:', e);
+            items = [];
+          }
+        }
+
         acc[item.meal_type] = {
-          items: JSON.parse(item.items),
+          items: items,
           special_note: item.special_note
         };
         return acc;
@@ -70,7 +108,8 @@ class MenuController {
       logger.error('Error fetching today menu:', error);
       res.status(500).json({
         success: false,
-        message: 'Failed to fetch today\'s menu'
+        message: 'Failed to fetch today\'s menu',
+        error: error.message
       });
     }
   }

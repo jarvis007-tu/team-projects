@@ -2,6 +2,7 @@ const { mongoose } = require('../config/mongodb');
 const logger = require('../utils/logger');
 
 // Import all models
+const Mess = require('./Mess');
 const User = require('./User');
 const Subscription = require('./Subscription');
 const Attendance = require('./Attendance');
@@ -12,6 +13,7 @@ const Notification = require('./Notification');
 // Export all models
 module.exports = {
   mongoose,
+  Mess,
   User,
   Subscription,
   Attendance,

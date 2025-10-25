@@ -8,6 +8,12 @@ const AttendanceSchema = new mongoose.Schema({
     ref: 'User',
     required: [true, 'User ID is required']
   },
+  mess_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Mess',
+    required: [true, 'Mess ID is required'],
+    index: true
+  },
   subscription_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Subscription',

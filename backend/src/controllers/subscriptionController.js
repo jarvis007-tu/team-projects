@@ -1,17 +1,22 @@
 const moment = require('moment');
 const User = require('../models/User');
+const Mess = require('../models/Mess');
 const Subscription = require('../models/Subscription');
 const logger = require('../utils/logger');
 const mongoose = require('mongoose');
+const { addMessFilter } = require('../utils/messHelpers');
 
 class SubscriptionController {
   // Get all subscriptions (Admin only)
   async getAllSubscriptions(req, res) {
     try {
-      const { page = 1, limit = 10, status, plan_type, user_id } = req.query;
+      const { page = 1, limit = 10, status, plan_type, user_id, mess_id } = req.query;
       const skip = (page - 1) * limit;
 
-      const queryConditions = {};
+      const queryConditions = { deleted_at: null };
+
+      // Add mess filtering
+      addMessFilter(queryConditions, req.user, mess_id);
 
       if (status) queryConditions.status = status;
       if (plan_type) queryConditions.plan_type = plan_type;
@@ -22,6 +27,7 @@ class SubscriptionController {
           .limit(parseInt(limit))
           .skip(skip)
           .populate('user_id', 'full_name email phone')
+          .populate('mess_id', 'name code')
           .sort({ createdAt: -1 }),
         Subscription.countDocuments(queryConditions)
       ]);
@@ -75,6 +81,7 @@ class SubscriptionController {
 
       const subscription = await Subscription.findOne({
         user_id: userId,
+        mess_id: req.user.mess_id,
         status: 'active',
         start_date: { $lte: today },
         end_date: { $gte: today }
@@ -103,97 +110,129 @@ class SubscriptionController {
 
   // Create subscription
   async createSubscription(req, res) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
-      const { user_id, plan_type, start_date, payment_id } = req.body;
+      const {
+        user_id,
+        mess_id,
+        plan_id,
+        plan_type,
+        start_date,
+        end_date,
+        status,
+        payment_id,
+        meal_plan
+      } = req.body;
 
       // Check if user exists
       const user = await User.findById(user_id);
       if (!user) {
-        await session.abortTransaction();
-        session.endSession();
         return res.status(404).json({
           success: false,
           message: 'User not found'
         });
       }
 
+      // Use mess_id from request or user's mess_id
+      const subscriptionMessId = mess_id || user.mess_id;
+
       // Check for existing active subscription
       const today = moment().format('YYYY-MM-DD');
       const existingSubscription = await Subscription.findOne({
         user_id,
+        mess_id: subscriptionMessId,
         status: 'active',
         end_date: { $gte: today }
       });
 
       if (existingSubscription) {
-        await session.abortTransaction();
-        session.endSession();
         return res.status(400).json({
           success: false,
-          message: 'User already has an active subscription'
+          message: 'User already has an active subscription for this mess'
         });
       }
 
-      // Calculate end date based on plan type
-      const startMoment = moment(start_date || undefined);
-      let endDate;
-      let amount;
+      // Prepare subscription data
+      const subscriptionData = {
+        user_id,
+        mess_id: subscriptionMessId,
+        start_date: start_date || moment().format('YYYY-MM-DD'),
+        status: status || 'active'
+      };
 
-      switch (plan_type) {
-        case 'weekly':
-          endDate = startMoment.add(7, 'days');
-          amount = 700;
-          break;
-        case 'monthly':
-          endDate = startMoment.add(1, 'month');
-          amount = 3000;
-          break;
-        case 'quarterly':
-          endDate = startMoment.add(3, 'months');
-          amount = 8500;
-          break;
-        case 'yearly':
-          endDate = startMoment.add(1, 'year');
-          amount = 30000;
-          break;
-        default:
-          await session.abortTransaction();
-          session.endSession();
-          return res.status(400).json({
-            success: false,
-            message: 'Invalid plan type'
-          });
+      // Handle plan_type (old model) or end_date (new model)
+      if (plan_type) {
+        // Old model: calculate end date based on plan type
+        const startMoment = moment(start_date || undefined);
+        let calculatedEndDate;
+        let amount;
+
+        switch (plan_type) {
+          case 'weekly':
+            calculatedEndDate = startMoment.clone().add(7, 'days');
+            amount = 700;
+            break;
+          case 'monthly':
+            calculatedEndDate = startMoment.clone().add(1, 'month');
+            amount = 3000;
+            break;
+          case 'quarterly':
+            calculatedEndDate = startMoment.clone().add(3, 'months');
+            amount = 8500;
+            break;
+          case 'yearly':
+            calculatedEndDate = startMoment.clone().add(1, 'year');
+            amount = 30000;
+            break;
+          default:
+            return res.status(400).json({
+              success: false,
+              message: 'Invalid plan type'
+            });
+        }
+
+        subscriptionData.plan_type = plan_type;
+        subscriptionData.end_date = calculatedEndDate.format('YYYY-MM-DD');
+        subscriptionData.amount = amount;
+      } else if (end_date) {
+        // New model: use provided end_date
+        subscriptionData.end_date = end_date;
+        subscriptionData.plan_type = 'monthly'; // Default plan_type for model requirement
+
+        // Calculate amount based on duration
+        const startMoment = moment(start_date || undefined);
+        const endMoment = moment(end_date);
+        const durationDays = endMoment.diff(startMoment, 'days');
+
+        // Simple pricing: ₹100 per day
+        subscriptionData.amount = Math.max(durationDays * 100, 100); // Minimum ₹100
+      } else {
+        // Default to 30 days if no plan_type or end_date provided
+        subscriptionData.end_date = moment(start_date || undefined).add(30, 'days').format('YYYY-MM-DD');
+        subscriptionData.plan_type = 'monthly';
+        subscriptionData.amount = 3000; // Default monthly amount
       }
 
-      const subscription = await Subscription.create([{
-        user_id,
-        plan_type,
-        start_date: start_date || moment().format('YYYY-MM-DD'),
-        end_date: endDate.format('YYYY-MM-DD'),
-        amount,
-        payment_id,
-        payment_status: payment_id ? 'paid' : 'pending',
-        status: 'active'
-      }], { session });
+      // Add optional fields
+      if (plan_id) subscriptionData.plan_id = plan_id;
+      if (payment_id) {
+        subscriptionData.payment_id = payment_id;
+        subscriptionData.payment_status = 'paid';
+      }
+      if (meal_plan) subscriptionData.meal_plan = meal_plan;
 
-      await session.commitTransaction();
-      session.endSession();
+      const subscription = await Subscription.create(subscriptionData);
 
       res.status(201).json({
         success: true,
         message: 'Subscription created successfully',
-        data: subscription[0]
+        data: subscription
       });
     } catch (error) {
-      await session.abortTransaction();
-      session.endSession();
       logger.error('Error creating subscription:', error);
       res.status(500).json({
         success: false,
-        message: 'Failed to create subscription'
+        message: 'Failed to create subscription',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   }

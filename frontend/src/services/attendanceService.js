@@ -62,6 +62,21 @@ const attendanceService = {
   // Get missing attendance alerts
   getMissingAttendanceAlerts: () => {
     return api.get('/attendance/missing-alerts');
+  },
+
+  // Scan QR code for attendance
+  scanQR: (data) => {
+    return api.post('/attendance/scan', data);
+  },
+
+  // Get today's meal info
+  getTodayMeal: () => {
+    return api.get('/menu/today');
+  },
+
+  // Get user's attendance history
+  getAttendanceHistory: (params = {}) => {
+    return api.get('/attendance/history', { params });
   }
 };
 

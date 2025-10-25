@@ -12,6 +12,7 @@ const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
 // Admin Pages
 const AdminLayout = lazy(() => import('./layouts/AdminLayout'));
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
+const MessManagement = lazy(() => import('./pages/admin/AdminMessManagement'));
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
 const SubscriptionManagement = lazy(() => import('./pages/admin/AdminSubscriptions'));
 const AttendanceManagement = lazy(() => import('./pages/admin/AdminAttendance'));
@@ -36,29 +37,29 @@ function App() {
     <Suspense fallback={<LoadingSpinner fullScreen />}>
       <Routes>
         {/* Public Routes */}
-        <Route 
-          path="/" 
+        <Route
+          path="/"
           element={
             isAuthenticated ? (
-              user?.role === 'admin' ? 
-                <Navigate to="/admin/dashboard" replace /> : 
+              (user?.role === 'super_admin' || user?.role === 'mess_admin') ?
+                <Navigate to="/admin/dashboard" replace /> :
                 <Navigate to="/user/dashboard" replace />
             ) : (
               <Navigate to="/login" replace />
             )
-          } 
+          }
         />
-        <Route 
-          path="/login" 
+        <Route
+          path="/login"
           element={
             isAuthenticated ? (
-              user?.role === 'admin' ? 
-                <Navigate to="/admin/dashboard" replace /> : 
+              (user?.role === 'super_admin' || user?.role === 'mess_admin') ?
+                <Navigate to="/admin/dashboard" replace /> :
                 <Navigate to="/user/dashboard" replace />
             ) : (
               <Login />
             )
-          } 
+          }
         />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -67,13 +68,14 @@ function App() {
         <Route
           path="/admin"
           element={
-            <ProtectedRoute allowedRoles={['admin']}>
+            <ProtectedRoute allowedRoles={['super_admin', 'mess_admin']}>
               <AdminLayout />
             </ProtectedRoute>
           }
         >
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="messes" element={<MessManagement />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="subscriptions" element={<SubscriptionManagement />} />
           <Route path="attendance" element={<AttendanceManagement />} />
@@ -87,7 +89,7 @@ function App() {
         <Route
           path="/user"
           element={
-            <ProtectedRoute allowedRoles={['subscriber', 'user', 'admin']}>
+            <ProtectedRoute allowedRoles={['subscriber', 'user', 'super_admin', 'mess_admin']}>
               <UserLayout />
             </ProtectedRoute>
           }

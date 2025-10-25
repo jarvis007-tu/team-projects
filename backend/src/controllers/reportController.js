@@ -1,4 +1,3 @@
-const { Op } = require('sequelize');
 const moment = require('moment');
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
@@ -7,76 +6,112 @@ const Subscription = require('../models/Subscription');
 const Attendance = require('../models/Attendance');
 const MealConfirmation = require('../models/MealConfirmation');
 const logger = require('../utils/logger');
-const { sequelize } = require('../config/database');
 
 class ReportController {
   // Get dashboard statistics
   async getDashboardStats(req, res) {
     try {
-      const today = moment().format('YYYY-MM-DD');
-      const startOfMonth = moment().startOf('month').format('YYYY-MM-DD');
-      const endOfMonth = moment().endOf('month').format('YYYY-MM-DD');
+      const today = moment().startOf('day').toDate();
+      const endOfToday = moment().endOf('day').toDate();
+      const startOfMonth = moment().startOf('month').toDate();
+      const endOfMonth = moment().endOf('month').toDate();
 
       // User statistics
       const [totalUsers, activeUsers, totalAdmins] = await Promise.all([
-        User.count(),
-        User.count({ where: { status: 'active' } }),
-        User.count({ where: { role: 'admin' } })
+        User.countDocuments(),
+        User.countDocuments({ status: 'active' }),
+        User.countDocuments({ role: 'admin' })
       ]);
 
       // Subscription statistics
-      const [activeSubscriptions, expiringThisWeek, monthlyRevenue] = await Promise.all([
-        Subscription.count({
-          where: {
-            status: 'active',
-            end_date: { [Op.gte]: today }
+      const sevenDaysFromNow = moment().add(7, 'days').endOf('day').toDate();
+      const [activeSubscriptions, expiringThisWeek, monthlyRevenueResult] = await Promise.all([
+        Subscription.countDocuments({
+          status: 'active',
+          end_date: { $gte: today }
+        }),
+        Subscription.countDocuments({
+          status: 'active',
+          end_date: {
+            $gte: today,
+            $lte: sevenDaysFromNow
           }
         }),
-        Subscription.count({
-          where: {
-            status: 'active',
-            end_date: {
-              [Op.between]: [
-                today,
-                moment().add(7, 'days').format('YYYY-MM-DD')
-              ]
+        Subscription.aggregate([
+          {
+            $match: {
+              payment_status: 'paid',
+              createdAt: {
+                $gte: startOfMonth,
+                $lte: endOfMonth
+              }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: '$amount' }
             }
           }
-        }),
-        Subscription.sum('amount', {
-          where: {
-            payment_status: 'paid',
-            createdAt: {
-              [Op.between]: [startOfMonth, endOfMonth]
-            }
-          }
-        })
+        ])
       ]);
 
-      // Today's attendance
-      const todayAttendance = await Attendance.findAll({
-        attributes: [
-          'meal_type',
-          [sequelize.fn('COUNT', sequelize.col('attendance_id')), 'count']
-        ],
-        where: { scan_date: today },
-        group: ['meal_type']
-      });
+      const monthlyRevenue = monthlyRevenueResult.length > 0 ? monthlyRevenueResult[0].total : 0;
 
-      // Monthly attendance trend
-      const monthlyTrend = await Attendance.findAll({
-        attributes: [
-          [sequelize.fn('DATE', sequelize.col('scan_date')), 'date'],
-          [sequelize.fn('COUNT', sequelize.col('attendance_id')), 'count']
-        ],
-        where: {
-          scan_date: {
-            [Op.between]: [startOfMonth, endOfMonth]
+      // Today's attendance
+      const todayAttendance = await Attendance.aggregate([
+        {
+          $match: {
+            scan_date: {
+              $gte: today,
+              $lte: endOfToday
+            }
           }
         },
-        group: [sequelize.fn('DATE', sequelize.col('scan_date'))],
-        order: [[sequelize.fn('DATE', sequelize.col('scan_date')), 'ASC']]
-      });
+        {
+          $group: {
+            _id: '$meal_type',
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $project: {
+            meal_type: '$_id',
+            count: 1,
+            _id: 0
+          }
+        }
+      ]);
+
+      // Monthly attendance trend
+      const monthlyTrend = await Attendance.aggregate([
+        {
+          $match: {
+            scan_date: {
+              $gte: startOfMonth,
+              $lte: endOfMonth
+            }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: '%Y-%m-%d', date: '$scan_date' }
+            },
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $project: {
+            date: '$_id',
+            count: 1,
+            _id: 0
+          }
+        },
+        {
+          $sort: { date: 1 }
+        }
+      ]);
 
       res.json({
         success: true,
@@ -114,21 +149,17 @@ class ReportController {
       const whereConditions = {};
       if (start_date && end_date) {
         whereConditions.scan_date = {
-          [Op.between]: [start_date, end_date]
+          $gte: moment(start_date).startOf('day').toDate(),
+          $lte: moment(end_date).endOf('day').toDate()
         };
       }
       if (meal_type) whereConditions.meal_type = meal_type;
       if (user_id) whereConditions.user_id = user_id;
 
-      const attendance = await Attendance.findAll({
-        where: whereConditions,
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['full_name', 'email', 'phone']
-        }],
-        order: [['scan_date', 'DESC'], ['scan_time', 'DESC']]
-      });
+      const attendance = await Attendance.find(whereConditions)
+        .populate('user_id', 'full_name email phone')
+        .sort({ scan_date: -1, scan_time: -1 })
+        .lean();
 
       // Generate summary
       const summary = {
@@ -146,28 +177,36 @@ class ReportController {
         summary.byMealType[record.meal_type]++;
 
         // By date
-        if (!summary.byDate[record.scan_date]) {
-          summary.byDate[record.scan_date] = 0;
+        const dateStr = moment(record.scan_date).format('YYYY-MM-DD');
+        if (!summary.byDate[dateStr]) {
+          summary.byDate[dateStr] = 0;
         }
-        summary.byDate[record.scan_date]++;
+        summary.byDate[dateStr]++;
 
         // Unique users
-        summary.uniqueUsers.add(record.user_id);
+        summary.uniqueUsers.add(record.user_id.toString());
       });
 
       summary.uniqueUsers = summary.uniqueUsers.size;
 
+      // Transform attendance for response (rename user_id to user)
+      const transformedAttendance = attendance.map(record => ({
+        ...record,
+        user: record.user_id,
+        user_id: record.user_id._id
+      }));
+
       if (format === 'excel') {
-        return this.exportAttendanceToExcel(res, attendance, summary);
+        return this.exportAttendanceToExcel(res, transformedAttendance, summary);
       } else if (format === 'pdf') {
-        return this.exportAttendanceToPDF(res, attendance, summary);
+        return this.exportAttendanceToPDF(res, transformedAttendance, summary);
       }
 
       res.json({
         success: true,
         data: {
           summary,
-          records: attendance
+          records: transformedAttendance
         }
       });
     } catch (error) {
@@ -188,15 +227,10 @@ class ReportController {
       if (status) whereConditions.status = status;
       if (plan_type) whereConditions.plan_type = plan_type;
 
-      const subscriptions = await Subscription.findAll({
-        where: whereConditions,
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['full_name', 'email', 'phone']
-        }],
-        order: [['createdAt', 'DESC']]
-      });
+      const subscriptions = await Subscription.find(whereConditions)
+        .populate('user_id', 'full_name email phone')
+        .sort({ createdAt: -1 })
+        .lean();
 
       // Generate summary
       const summary = {
@@ -225,15 +259,22 @@ class ReportController {
         }
       });
 
+      // Transform subscriptions for response (rename user_id to user)
+      const transformedSubscriptions = subscriptions.map(sub => ({
+        ...sub,
+        user: sub.user_id,
+        user_id: sub.user_id._id
+      }));
+
       if (format === 'excel') {
-        return this.exportSubscriptionsToExcel(res, subscriptions, summary);
+        return this.exportSubscriptionsToExcel(res, transformedSubscriptions, summary);
       }
 
       res.json({
         success: true,
         data: {
           summary,
-          records: subscriptions
+          records: transformedSubscriptions
         }
       });
     } catch (error) {
@@ -250,52 +291,79 @@ class ReportController {
     try {
       const { start_date, end_date, group_by = 'month' } = req.query;
 
-      const whereConditions = {
+      const matchConditions = {
         payment_status: 'paid'
       };
 
       if (start_date && end_date) {
-        whereConditions.createdAt = {
-          [Op.between]: [start_date, end_date]
+        matchConditions.createdAt = {
+          $gte: moment(start_date).startOf('day').toDate(),
+          $lte: moment(end_date).endOf('day').toDate()
         };
       }
 
-      let groupByClause;
-      let dateFormat;
+      let groupByExpression;
+      let sortField;
 
       switch (group_by) {
         case 'day':
-          groupByClause = sequelize.fn('DATE', sequelize.col('createdAt'));
-          dateFormat = 'DATE';
+          groupByExpression = {
+            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
+          };
+          sortField = 1;
           break;
         case 'week':
-          groupByClause = sequelize.fn('YEARWEEK', sequelize.col('createdAt'));
-          dateFormat = 'YEARWEEK';
+          groupByExpression = {
+            $dateToString: { format: '%Y-W%V', date: '$createdAt' }
+          };
+          sortField = 1;
           break;
         case 'month':
-          groupByClause = sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), '%Y-%m');
-          dateFormat = 'MONTH';
+          groupByExpression = {
+            $dateToString: { format: '%Y-%m', date: '$createdAt' }
+          };
+          sortField = 1;
           break;
         case 'year':
-          groupByClause = sequelize.fn('YEAR', sequelize.col('createdAt'));
-          dateFormat = 'YEAR';
+          groupByExpression = {
+            $dateToString: { format: '%Y', date: '$createdAt' }
+          };
+          sortField = 1;
           break;
         default:
-          groupByClause = sequelize.fn('DATE_FORMAT', sequelize.col('createdAt'), '%Y-%m');
-          dateFormat = 'MONTH';
+          groupByExpression = {
+            $dateToString: { format: '%Y-%m', date: '$createdAt' }
+          };
+          sortField = 1;
       }
 
-      const revenue = await Subscription.findAll({
-        attributes: [
-          [groupByClause, 'period'],
-          [sequelize.fn('COUNT', sequelize.col('subscription_id')), 'count'],
-          [sequelize.fn('SUM', sequelize.col('amount')), 'total_revenue'],
-          'plan_type'
-        ],
-        where: whereConditions,
-        group: ['period', 'plan_type'],
-        order: [[groupByClause, 'ASC']]
-      });
+      const revenue = await Subscription.aggregate([
+        {
+          $match: matchConditions
+        },
+        {
+          $group: {
+            _id: {
+              period: groupByExpression,
+              plan_type: '$plan_type'
+            },
+            count: { $sum: 1 },
+            total_revenue: { $sum: '$amount' }
+          }
+        },
+        {
+          $project: {
+            period: '$_id.period',
+            plan_type: '$_id.plan_type',
+            count: 1,
+            total_revenue: 1,
+            _id: 0
+          }
+        },
+        {
+          $sort: { period: sortField }
+        }
+      ]);
 
       // Calculate totals
       const totals = {
@@ -305,18 +373,18 @@ class ReportController {
       };
 
       revenue.forEach(record => {
-        totals.totalRevenue += parseFloat(record.dataValues.total_revenue);
-        totals.totalSubscriptions += parseInt(record.dataValues.count);
-        
+        totals.totalRevenue += parseFloat(record.total_revenue);
+        totals.totalSubscriptions += parseInt(record.count);
+
         if (!totals.byPlanType[record.plan_type]) {
           totals.byPlanType[record.plan_type] = {
             count: 0,
             revenue: 0
           };
         }
-        
-        totals.byPlanType[record.plan_type].count += parseInt(record.dataValues.count);
-        totals.byPlanType[record.plan_type].revenue += parseFloat(record.dataValues.total_revenue);
+
+        totals.byPlanType[record.plan_type].count += parseInt(record.count);
+        totals.byPlanType[record.plan_type].revenue += parseFloat(record.total_revenue);
       });
 
       res.json({
@@ -348,9 +416,7 @@ class ReportController {
       }
 
       // Get user details
-      const user = await User.findByPk(user_id, {
-        attributes: { exclude: ['password'] }
-      });
+      const user = await User.findById(user_id).select('-password').lean();
 
       if (!user) {
         return res.status(404).json({
@@ -362,33 +428,35 @@ class ReportController {
       const dateConditions = {};
       if (start_date && end_date) {
         dateConditions.scan_date = {
-          [Op.between]: [start_date, end_date]
+          $gte: moment(start_date).startOf('day').toDate(),
+          $lte: moment(end_date).endOf('day').toDate()
         };
       }
 
       // Get subscriptions
-      const subscriptions = await Subscription.findAll({
-        where: { user_id },
-        order: [['createdAt', 'DESC']]
-      });
+      const subscriptions = await Subscription.find({ user_id })
+        .sort({ createdAt: -1 })
+        .lean();
 
       // Get attendance
-      const attendance = await Attendance.findAll({
-        where: {
-          user_id,
-          ...dateConditions
-        },
-        order: [['scan_date', 'DESC'], ['scan_time', 'DESC']]
-      });
+      const attendance = await Attendance.find({
+        user_id,
+        ...dateConditions
+      })
+        .sort({ scan_date: -1, scan_time: -1 })
+        .lean();
 
       // Get meal confirmations
-      const confirmations = await MealConfirmation.findAll({
-        where: {
-          user_id,
-          meal_date: dateConditions.scan_date || { [Op.gte]: moment().subtract(30, 'days').format('YYYY-MM-DD') }
-        },
-        order: [['meal_date', 'DESC']]
-      });
+      const confirmationDateFilter = dateConditions.scan_date || {
+        $gte: moment().subtract(30, 'days').startOf('day').toDate()
+      };
+
+      const confirmations = await MealConfirmation.find({
+        user_id,
+        meal_date: confirmationDateFilter
+      })
+        .sort({ meal_date: -1 })
+        .lean();
 
       // Calculate statistics
       const stats = {
@@ -410,8 +478,8 @@ class ReportController {
       stats.confirmationRate = confirmedMeals > 0 ? ((attendedMeals / confirmedMeals) * 100).toFixed(2) : 0;
 
       // Get current active subscription
-      stats.currentSubscription = subscriptions.find(s => 
-        s.status === 'active' && 
+      stats.currentSubscription = subscriptions.find(s =>
+        s.status === 'active' &&
         moment(s.end_date).isAfter(moment())
       );
 
@@ -454,7 +522,7 @@ class ReportController {
       // Add data
       attendance.forEach(record => {
         worksheet.addRow({
-          date: record.scan_date,
+          date: moment(record.scan_date).format('YYYY-MM-DD'),
           time: moment(record.scan_time).format('HH:mm:ss'),
           name: record.user.full_name,
           email: record.user.email,
@@ -511,8 +579,8 @@ class ReportController {
           email: sub.user.email,
           phone: sub.user.phone,
           plan: sub.plan_type,
-          start: sub.start_date,
-          end: sub.end_date,
+          start: moment(sub.start_date).format('YYYY-MM-DD'),
+          end: moment(sub.end_date).format('YYYY-MM-DD'),
           amount: sub.amount,
           status: sub.status,
           payment: sub.payment_status
@@ -534,10 +602,10 @@ class ReportController {
   async exportAttendanceToPDF(res, attendance, summary) {
     try {
       const doc = new PDFDocument();
-      
+
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=attendance_report_${moment().format('YYYY-MM-DD')}.pdf`);
-      
+
       doc.pipe(res);
 
       // Title
@@ -565,7 +633,7 @@ class ReportController {
       doc.fontSize(10);
 
       attendance.slice(0, 50).forEach(record => {
-        doc.text(`${record.scan_date} ${moment(record.scan_time).format('HH:mm')} - ${record.user.full_name} - ${record.meal_type}`);
+        doc.text(`${moment(record.scan_date).format('YYYY-MM-DD')} ${moment(record.scan_time).format('HH:mm')} - ${record.user.full_name} - ${record.meal_type}`);
       });
 
       if (attendance.length > 50) {

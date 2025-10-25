@@ -1,131 +1,109 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 const moment = require('moment-timezone');
 const geolib = require('geolib');
 
-const Attendance = sequelize.define('Attendance', {
-  attendance_id: {
-    type: DataTypes.BIGINT,
-    primaryKey: true,
-    autoIncrement: true
-  },
+const AttendanceSchema = new mongoose.Schema({
   user_id: {
-    type: DataTypes.BIGINT,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'user_id'
-    }
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, 'User ID is required']
   },
   subscription_id: {
-    type: DataTypes.BIGINT,
-    allowNull: false,
-    references: {
-      model: 'subscriptions',
-      key: 'subscription_id'
-    }
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Subscription',
+    required: [true, 'Subscription ID is required']
   },
   scan_date: {
-    type: DataTypes.DATEONLY,
-    allowNull: false,
-    defaultValue: DataTypes.NOW
+    type: Date,
+    required: true,
+    default: Date.now
   },
   meal_type: {
-    type: DataTypes.ENUM('breakfast', 'lunch', 'dinner'),
-    allowNull: false
+    type: String,
+    enum: {
+      values: ['breakfast', 'lunch', 'dinner'],
+      message: '{VALUE} is not a valid meal type'
+    },
+    required: [true, 'Meal type is required']
   },
   scan_time: {
-    type: DataTypes.DATE,
-    allowNull: false,
-    defaultValue: DataTypes.NOW
+    type: Date,
+    required: true,
+    default: Date.now
   },
   qr_code: {
-    type: DataTypes.STRING(255),
-    allowNull: false
+    type: String,
+    required: [true, 'QR code is required']
   },
   geo_location: {
-    type: DataTypes.JSON,
-    allowNull: true,
+    type: Object,
+    default: null,
     validate: {
-      isValidLocation(value) {
+      validator: function(value) {
         if (value && (!value.latitude || !value.longitude)) {
-          throw new Error('Invalid geolocation format');
+          return false;
         }
-      }
+        return true;
+      },
+      message: 'Invalid geolocation format'
     }
   },
   distance_from_mess: {
-    type: DataTypes.FLOAT,
-    allowNull: true
+    type: Number,
+    default: null
   },
   device_info: {
-    type: DataTypes.JSON,
-    allowNull: true,
-    defaultValue: {}
+    type: Object,
+    default: {}
   },
   is_valid: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true
+    type: Boolean,
+    default: true
   },
   validation_errors: {
-    type: DataTypes.JSON,
-    defaultValue: []
+    type: [String],
+    default: []
   },
   scan_method: {
-    type: DataTypes.ENUM('qr', 'manual', 'face', 'nfc'),
-    defaultValue: 'qr'
+    type: String,
+    enum: {
+      values: ['qr', 'manual', 'face', 'nfc'],
+      message: '{VALUE} is not a valid scan method'
+    },
+    default: 'qr'
   },
   meal_consumed: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
+    type: Boolean,
+    default: false
   },
   feedback: {
-    type: DataTypes.JSON,
-    allowNull: true,
-    defaultValue: null
+    type: Object,
+    default: null
   },
   special_meal: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
+    type: Boolean,
+    default: false
   },
   ip_address: {
-    type: DataTypes.STRING(45),
-    allowNull: true
+    type: String,
+    maxlength: [45, 'IP address is too long']
   }
 }, {
-  tableName: 'attendance_logs',
   timestamps: true,
-  paranoid: false,
-  indexes: [
-    {
-      fields: ['user_id']
-    },
-    {
-      fields: ['subscription_id']
-    },
-    {
-      fields: ['scan_date']
-    },
-    {
-      fields: ['meal_type']
-    },
-    {
-      fields: ['is_valid']
-    },
-    {
-      unique: true,
-      name: 'idx_unique_meal_attendance',
-      fields: ['user_id', 'scan_date', 'meal_type']
-    },
-    {
-      name: 'idx_attendance_lookup',
-      fields: ['user_id', 'scan_date', 'meal_type', 'is_valid']
-    }
-  ]
+  collection: 'attendance_logs'
 });
 
-// Class methods
-Attendance.getMealTimings = function() {
+// Indexes
+AttendanceSchema.index({ user_id: 1 });
+AttendanceSchema.index({ subscription_id: 1 });
+AttendanceSchema.index({ scan_date: 1 });
+AttendanceSchema.index({ meal_type: 1 });
+AttendanceSchema.index({ is_valid: 1 });
+AttendanceSchema.index({ user_id: 1, scan_date: 1, meal_type: 1 }, { unique: true }); // Unique constraint
+AttendanceSchema.index({ user_id: 1, scan_date: 1, meal_type: 1, is_valid: 1 }); // Composite index
+
+// Static method to get meal timings
+AttendanceSchema.statics.getMealTimings = function() {
   return {
     breakfast: {
       start: process.env.BREAKFAST_START || '07:00',
@@ -142,33 +120,34 @@ Attendance.getMealTimings = function() {
   };
 };
 
-// Instance methods
-Attendance.prototype.validateMealTime = function() {
+// Instance method to validate meal time
+AttendanceSchema.methods.validateMealTime = function() {
   const now = moment().tz('Asia/Kolkata');
-  const timings = Attendance.getMealTimings();
+  const timings = this.constructor.getMealTimings();
   const mealTiming = timings[this.meal_type];
-  
+
   if (!mealTiming) {
     return { valid: false, error: 'Invalid meal type' };
   }
 
   const [startHour, startMin] = mealTiming.start.split(':').map(Number);
   const [endHour, endMin] = mealTiming.end.split(':').map(Number);
-  
+
   const startTime = now.clone().hour(startHour).minute(startMin).second(0);
   const endTime = now.clone().hour(endHour).minute(endMin).second(0);
-  
+
   if (now.isBetween(startTime, endTime)) {
     return { valid: true };
   } else {
-    return { 
-      valid: false, 
-      error: `${this.meal_type} is only available from ${mealTiming.start} to ${mealTiming.end}` 
+    return {
+      valid: false,
+      error: `${this.meal_type} is only available from ${mealTiming.start} to ${mealTiming.end}`
     };
   }
 };
 
-Attendance.prototype.validateGeolocation = function() {
+// Instance method to validate geolocation
+AttendanceSchema.methods.validateGeolocation = function() {
   if (!this.geo_location || !this.geo_location.latitude || !this.geo_location.longitude) {
     return { valid: true }; // Allow if geolocation is not provided (optional)
   }
@@ -191,29 +170,29 @@ Attendance.prototype.validateGeolocation = function() {
   if (distance <= maxDistance) {
     return { valid: true, distance };
   } else {
-    return { 
-      valid: false, 
+    return {
+      valid: false,
       error: `You are ${distance}m away from the mess. Maximum allowed distance is ${maxDistance}m`,
-      distance 
+      distance
     };
   }
 };
 
-Attendance.prototype.validateQRCode = async function(expectedQR) {
+// Instance method to validate QR code
+AttendanceSchema.methods.validateQRCode = async function(expectedQR) {
   if (this.qr_code !== expectedQR) {
     return { valid: false, error: 'Invalid or expired QR code' };
   }
   return { valid: true };
 };
 
-Attendance.prototype.checkDuplicateScan = async function() {
-  const existing = await Attendance.findOne({
-    where: {
-      user_id: this.user_id,
-      scan_date: this.scan_date,
-      meal_type: this.meal_type,
-      attendance_id: { [sequelize.Op.ne]: this.attendance_id }
-    }
+// Instance method to check duplicate scan
+AttendanceSchema.methods.checkDuplicateScan = async function() {
+  const existing = await this.constructor.findOne({
+    user_id: this.user_id,
+    scan_date: this.scan_date,
+    meal_type: this.meal_type,
+    _id: { $ne: this._id }
   });
 
   if (existing) {
@@ -222,7 +201,8 @@ Attendance.prototype.checkDuplicateScan = async function() {
   return { valid: true };
 };
 
-Attendance.prototype.performFullValidation = async function(expectedQR) {
+// Instance method to perform full validation
+AttendanceSchema.methods.performFullValidation = async function(expectedQR) {
   const errors = [];
   let isValid = true;
 
@@ -259,5 +239,39 @@ Attendance.prototype.performFullValidation = async function(expectedQR) {
 
   return { isValid, errors };
 };
+
+// Override toJSON to rename _id to attendance_id
+AttendanceSchema.methods.toJSON = function() {
+  const attendanceObject = this.toObject();
+  delete attendanceObject.__v;
+
+  // Rename _id to attendance_id for consistency
+  if (attendanceObject._id) {
+    attendanceObject.attendance_id = attendanceObject._id;
+    delete attendanceObject._id;
+  }
+
+  // Rename timestamps from camelCase to snake_case for frontend compatibility
+  if (attendanceObject.createdAt) {
+    attendanceObject.created_at = attendanceObject.createdAt;
+    delete attendanceObject.createdAt;
+  }
+  if (attendanceObject.updatedAt) {
+    attendanceObject.updated_at = attendanceObject.updatedAt;
+    delete attendanceObject.updatedAt;
+  }
+
+  // Convert ObjectId references to strings
+  if (attendanceObject.user_id) {
+    attendanceObject.user_id = attendanceObject.user_id.toString();
+  }
+  if (attendanceObject.subscription_id) {
+    attendanceObject.subscription_id = attendanceObject.subscription_id.toString();
+  }
+
+  return attendanceObject;
+};
+
+const Attendance = mongoose.model('Attendance', AttendanceSchema);
 
 module.exports = Attendance;

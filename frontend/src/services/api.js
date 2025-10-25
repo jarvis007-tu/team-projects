@@ -78,9 +78,9 @@ api.interceptors.response.use(
         toast.error(message);
       }
       
-      // Log errors in development
-      if (import.meta.env.DEV) {
-        console.error('API Error:', error.response);
+      // Log errors only in development mode
+      if (import.meta.env.DEV && import.meta.env.MODE !== 'production') {
+        console.debug('API Error:', error.response);
       }
     } else if (error.request) {
       toast.error('Network error. Please check your connection.');

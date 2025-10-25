@@ -1,5 +1,3 @@
-const { Op } = require('sequelize');
-const { sequelize } = require('../config/database');
 const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const logger = require('../utils/logger');
@@ -11,7 +9,7 @@ const subscriptionExtensions = {
     try {
       const { id } = req.params;
 
-      const subscription = await Subscription.findByPk(id);
+      const subscription = await Subscription.findById(id);
 
       if (!subscription) {
         return res.status(404).json({
@@ -20,7 +18,7 @@ const subscriptionExtensions = {
         });
       }
 
-      await subscription.destroy();
+      await subscription.remove();
 
       res.json({
         success: true,
@@ -47,19 +45,18 @@ const subscriptionExtensions = {
         });
       }
 
-      const result = await Subscription.update(updateData, {
-        where: {
-          subscription_id: {
-            [Op.in]: ids
-          }
-        }
-      });
+      const result = await Subscription.updateMany(
+        {
+          subscription_id: { $in: ids }
+        },
+        { $set: updateData }
+      );
 
       res.json({
         success: true,
-        message: `${result[0]} subscriptions updated successfully`,
+        message: `${result.modifiedCount} subscriptions updated successfully`,
         data: {
-          updated: result[0]
+          updated: result.modifiedCount
         }
       });
     } catch (error) {
@@ -152,10 +149,9 @@ const subscriptionExtensions = {
   async getSubscriptionAnalytics(req, res) {
     try {
       const { period = 'month' } = req.query;
-      
+
       let startDate = new Date();
-      let groupBy = 'DATE(created_at)';
-      
+
       switch (period) {
         case 'week':
           startDate.setDate(startDate.getDate() - 7);
@@ -165,75 +161,77 @@ const subscriptionExtensions = {
           break;
         case 'quarter':
           startDate.setMonth(startDate.getMonth() - 3);
-          groupBy = 'MONTH(created_at)';
           break;
         case 'year':
           startDate.setFullYear(startDate.getFullYear() - 1);
-          groupBy = 'MONTH(created_at)';
           break;
         default:
           startDate.setMonth(startDate.getMonth() - 1);
       }
 
-      // Get subscription trends
-      const trends = await sequelize.query(
-        `SELECT 
-          DATE(createdAt) as date,
-          COUNT(*) as new_subscriptions,
-          SUM(amount) as revenue
-        FROM subscriptions
-        WHERE createdAt >= :startDate
-          AND deletedAt IS NULL
-        GROUP BY DATE(createdAt)
-        ORDER BY date ASC`,
+      // Get subscription trends using aggregation
+      const trends = await Subscription.aggregate([
         {
-          replacements: { startDate },
-          type: sequelize.QueryTypes.SELECT
-        }
-      );
-
-      // Get subscription by plan type
-      const byPlanType = await Subscription.findAll({
-        attributes: [
-          'plan_type',
-          [sequelize.fn('COUNT', '*'), 'count'],
-          [sequelize.fn('SUM', sequelize.col('amount')), 'total_revenue']
-        ],
-        where: {
-          createdAt: {
-            [Op.gte]: startDate
+          $match: {
+            createdAt: { $gte: startDate },
+            deletedAt: null
           }
         },
-        group: ['plan_type']
-      });
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            new_subscriptions: { $sum: 1 },
+            revenue: { $sum: "$amount" }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            date: "$_id",
+            new_subscriptions: 1,
+            revenue: 1
+          }
+        },
+        {
+          $sort: { date: 1 }
+        }
+      ]);
+
+      // Get subscription by plan type
+      const byPlanType = await Subscription.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: startDate }
+          }
+        },
+        {
+          $group: {
+            _id: '$plan_type',
+            count: { $sum: 1 },
+            total_revenue: { $sum: '$amount' }
+          }
+        }
+      ]);
 
       // Get churn rate
-      const totalSubscriptions = await Subscription.count({
-        where: {
-          createdAt: {
-            [Op.gte]: startDate
-          }
-        }
+      const totalSubscriptions = await Subscription.countDocuments({
+        createdAt: { $gte: startDate }
       });
 
-      const cancelledSubscriptions = await Subscription.count({
-        where: {
-          status: 'cancelled',
-          updatedAt: {
-            [Op.gte]: startDate
-          }
-        }
+      const cancelledSubscriptions = await Subscription.countDocuments({
+        status: 'cancelled',
+        updatedAt: { $gte: startDate }
       });
 
-      const churnRate = totalSubscriptions > 0 
+      const churnRate = totalSubscriptions > 0
         ? ((cancelledSubscriptions / totalSubscriptions) * 100).toFixed(2)
         : 0;
 
       // Get active vs inactive
       const [activeCount, inactiveCount, expiredCount] = await Promise.all([
-        Subscription.count({ where: { status: 'active' } }),
-        Subscription.count({ where: { status: 'inactive' } }),
-        Subscription.count({ where: { status: 'expired' } })
+        Subscription.countDocuments({ status: 'active' }),
+        Subscription.countDocuments({ status: 'inactive' }),
+        Subscription.countDocuments({ status: 'expired' })
       ]);
 
       res.json({
@@ -273,24 +271,19 @@ const subscriptionExtensions = {
       if (status) whereConditions.status = status;
       if (start_date && end_date) {
         whereConditions.createdAt = {
-          [Op.between]: [start_date, end_date]
+          $gte: start_date,
+          $lte: end_date
         };
       }
 
-      const subscriptions = await Subscription.findAll({
-        where: whereConditions,
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'full_name', 'email', 'phone']
-        }],
-        order: [['createdAt', 'DESC']]
-      });
+      const subscriptions = await Subscription.find(whereConditions)
+        .populate('user_id', 'user_id full_name email phone')
+        .sort({ createdAt: -1 });
 
       if (format === 'csv') {
-        const csv = 'ID,User,Email,Plan,Amount,Status,Start Date,End Date\n' + 
-          subscriptions.map(s => 
-            `${s.subscription_id},"${s.user?.full_name || ''}","${s.user?.email || ''}","${s.plan_type}",${s.amount},"${s.status}","${s.start_date}","${s.end_date}"`
+        const csv = 'ID,User,Email,Plan,Amount,Status,Start Date,End Date\n' +
+          subscriptions.map(s =>
+            `${s.subscription_id},"${s.user_id?.full_name || ''}","${s.user_id?.email || ''}","${s.plan_type}",${s.amount},"${s.status}","${s.start_date}","${s.end_date}"`
           ).join('\n');
 
         res.setHeader('Content-Type', 'text/csv');

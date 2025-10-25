@@ -7,7 +7,7 @@ const cors = require('cors');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const winston = require('winston');
-const { sequelize } = require('./config/database');
+const { connectDB, disconnectDB } = require('./config/mongodb');
 const { redisClient } = require('./config/redis-optional');
 const { errorHandler } = require('./middleware/errorHandler');
 const logger = require('./utils/logger');
@@ -36,17 +36,10 @@ class Server {
 
   async setupDatabase() {
     try {
-      await sequelize.authenticate();
-      logger.info('Database connected successfully');
-      
-      if (!this.isProduction) {
-        // Use force: false to avoid recreating tables
-        // This prevents backup table issues with unique constraints
-        await sequelize.sync({ force: false });
-        logger.info('Database synchronized');
-      }
+      await connectDB();
+      logger.info('MongoDB connected successfully');
     } catch (error) {
-      logger.error('Database connection failed:', error);
+      logger.error('MongoDB connection failed:', error);
       throw error;
     }
   }
@@ -138,7 +131,8 @@ class Server {
         success: true,
         message: 'Server is healthy',
         timestamp: new Date().toISOString(),
-        uptime: process.uptime()
+        uptime: process.uptime(),
+        database: 'MongoDB'
       });
     });
   }
@@ -162,7 +156,7 @@ class Server {
     // Graceful shutdown
     process.on('SIGTERM', this.gracefulShutdown.bind(this));
     process.on('SIGINT', this.gracefulShutdown.bind(this));
-    
+
     // Uncaught exception handler
     process.on('uncaughtException', (error) => {
       logger.error('Uncaught Exception:', error);
@@ -179,12 +173,13 @@ class Server {
     this.server = this.app.listen(this.port, () => {
       logger.info(`Server running on port ${this.port} in ${process.env.NODE_ENV} mode`);
       logger.info(`API URL: ${process.env.SERVER_URL}/api/${process.env.API_VERSION}`);
+      logger.info('Database: MongoDB');
     });
   }
 
   async gracefulShutdown() {
     logger.info('Graceful shutdown initiated...');
-    
+
     // Stop accepting new connections
     if (this.server) {
       this.server.close(() => {
@@ -194,10 +189,10 @@ class Server {
 
     // Close database connections
     try {
-      await sequelize.close();
-      logger.info('Database connection closed');
+      await disconnectDB();
+      logger.info('MongoDB connection closed');
     } catch (error) {
-      logger.error('Error closing database:', error);
+      logger.error('Error closing MongoDB:', error);
     }
 
     // Close Redis connection

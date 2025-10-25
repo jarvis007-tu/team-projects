@@ -1,47 +1,49 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
+const moment = require('moment-timezone');
 
-const WeeklyMenu = sequelize.define('WeeklyMenu', {
-  menu_id: {
-    type: DataTypes.BIGINT,
-    primaryKey: true,
-    autoIncrement: true
-  },
+const WeeklyMenuSchema = new mongoose.Schema({
   week_start_date: {
-    type: DataTypes.DATEONLY,
-    allowNull: false
+    type: Date,
+    required: [true, 'Week start date is required']
   },
   week_end_date: {
-    type: DataTypes.DATEONLY,
-    allowNull: false
+    type: Date,
+    required: [true, 'Week end date is required']
   },
   day: {
-    type: DataTypes.ENUM('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'),
-    allowNull: false
+    type: String,
+    enum: {
+      values: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+      message: '{VALUE} is not a valid day'
+    },
+    required: [true, 'Day is required']
   },
   meal_type: {
-    type: DataTypes.ENUM('breakfast', 'lunch', 'dinner'),
-    allowNull: false
+    type: String,
+    enum: {
+      values: ['breakfast', 'lunch', 'dinner'],
+      message: '{VALUE} is not a valid meal type'
+    },
+    required: [true, 'Meal type is required']
   },
   items: {
-    type: DataTypes.JSON,
-    allowNull: false,
-    defaultValue: [],
+    type: [String],
+    required: true,
+    default: [],
     validate: {
-      isArray(value) {
-        if (!Array.isArray(value)) {
-          throw new Error('Items must be an array');
-        }
-      }
+      validator: function(value) {
+        return Array.isArray(value);
+      },
+      message: 'Items must be an array'
     }
   },
   special_items: {
-    type: DataTypes.JSON,
-    defaultValue: []
+    type: [String],
+    default: []
   },
   nutritional_info: {
-    type: DataTypes.JSON,
-    defaultValue: {
+    type: Object,
+    default: {
       calories: 0,
       protein: 0,
       carbs: 0,
@@ -50,99 +52,129 @@ const WeeklyMenu = sequelize.define('WeeklyMenu', {
     }
   },
   is_veg: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true
+    type: Boolean,
+    default: true
   },
   allergen_info: {
-    type: DataTypes.JSON,
-    defaultValue: []
+    type: [String],
+    default: []
   },
   price: {
-    type: DataTypes.DECIMAL(10, 2),
-    defaultValue: 0
+    type: Number,
+    default: 0,
+    min: [0, 'Price cannot be negative']
   },
   created_by: {
-    type: DataTypes.BIGINT,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'user_id'
-    }
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, 'Created by is required']
   },
   is_active: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true
+    type: Boolean,
+    default: true
   },
   notes: {
-    type: DataTypes.TEXT,
-    allowNull: true
+    type: String
+  },
+  deleted_at: {
+    type: Date,
+    default: null
   }
 }, {
-  tableName: 'weekly_menus',
   timestamps: true,
-  paranoid: true,
-  indexes: [
-    {
-      fields: ['week_start_date', 'week_end_date']
-    },
-    {
-      fields: ['day']
-    },
-    {
-      fields: ['meal_type']
-    },
-    {
-      fields: ['is_active']
-    },
-    {
-      unique: true,
-      name: 'idx_unique_menu',
-      fields: ['week_start_date', 'day', 'meal_type']
-    }
-  ]
+  collection: 'weekly_menus'
 });
 
-// Class methods
-WeeklyMenu.getCurrentWeekMenu = async function() {
-  const moment = require('moment-timezone');
-  const startOfWeek = moment().tz('Asia/Kolkata').startOf('week');
-  const endOfWeek = moment().tz('Asia/Kolkata').endOf('week');
+// Indexes
+WeeklyMenuSchema.index({ week_start_date: 1, week_end_date: 1 });
+WeeklyMenuSchema.index({ day: 1 });
+WeeklyMenuSchema.index({ meal_type: 1 });
+WeeklyMenuSchema.index({ is_active: 1 });
+WeeklyMenuSchema.index({ week_start_date: 1, day: 1, meal_type: 1 }, { unique: true }); // Unique constraint
 
-  return await this.findAll({
-    where: {
-      week_start_date: {
-        [sequelize.Op.gte]: startOfWeek.format('YYYY-MM-DD')
-      },
-      week_end_date: {
-        [sequelize.Op.lte]: endOfWeek.format('YYYY-MM-DD')
-      },
-      is_active: true
-    },
-    order: [
-      ['day', 'ASC'],
-      ['meal_type', 'ASC']
-    ]
-  });
+// Static method to get current week menu
+WeeklyMenuSchema.statics.getCurrentWeekMenu = async function() {
+  const startOfWeek = moment().tz('Asia/Kolkata').startOf('week').toDate();
+  const endOfWeek = moment().tz('Asia/Kolkata').endOf('week').toDate();
+
+  return await this.find({
+    week_start_date: { $gte: startOfWeek },
+    week_end_date: { $lte: endOfWeek },
+    is_active: true,
+    deleted_at: null
+  })
+  .sort({ day: 1, meal_type: 1 })
+  .populate('created_by', 'full_name email');
 };
 
-WeeklyMenu.getTodayMenu = async function() {
-  const moment = require('moment-timezone');
+// Static method to get today's menu
+WeeklyMenuSchema.statics.getTodayMenu = async function() {
   const today = moment().tz('Asia/Kolkata').format('dddd').toLowerCase();
-  const startOfWeek = moment().tz('Asia/Kolkata').startOf('week');
-  
-  return await this.findAll({
-    where: {
-      day: today,
-      week_start_date: {
-        [sequelize.Op.lte]: moment().format('YYYY-MM-DD')
-      },
-      week_end_date: {
-        [sequelize.Op.gte]: moment().format('YYYY-MM-DD')
-      },
-      is_active: true
-    },
-    order: [['meal_type', 'ASC']]
-  });
+  const currentDate = moment().tz('Asia/Kolkata').toDate();
+
+  return await this.find({
+    day: today,
+    week_start_date: { $lte: currentDate },
+    week_end_date: { $gte: currentDate },
+    is_active: true,
+    deleted_at: null
+  })
+  .sort({ meal_type: 1 })
+  .populate('created_by', 'full_name email');
 };
+
+// Soft delete method
+WeeklyMenuSchema.methods.softDelete = async function() {
+  this.deleted_at = new Date();
+  await this.save();
+};
+
+// Restore method
+WeeklyMenuSchema.methods.restore = async function() {
+  this.deleted_at = null;
+  await this.save();
+};
+
+// Override toJSON to rename _id to menu_id
+WeeklyMenuSchema.methods.toJSON = function() {
+  const menuObject = this.toObject();
+  delete menuObject.__v;
+
+  // Rename _id to menu_id for consistency
+  if (menuObject._id) {
+    menuObject.menu_id = menuObject._id;
+    delete menuObject._id;
+  }
+
+  // Rename timestamps from camelCase to snake_case for frontend compatibility
+  if (menuObject.createdAt) {
+    menuObject.created_at = menuObject.createdAt;
+    delete menuObject.createdAt;
+  }
+  if (menuObject.updatedAt) {
+    menuObject.updated_at = menuObject.updatedAt;
+    delete menuObject.updatedAt;
+  }
+
+  // Convert created_by ObjectId to string
+  if (menuObject.created_by && typeof menuObject.created_by === 'object' && menuObject.created_by._id) {
+    // Already populated, keep as is
+  } else if (menuObject.created_by) {
+    menuObject.created_by = menuObject.created_by.toString();
+  }
+
+  return menuObject;
+};
+
+// Static methods for finding active records
+WeeklyMenuSchema.statics.findActive = function(conditions = {}) {
+  return this.find({ ...conditions, deleted_at: null });
+};
+
+WeeklyMenuSchema.statics.findOneActive = function(conditions = {}) {
+  return this.findOne({ ...conditions, deleted_at: null });
+};
+
+const WeeklyMenu = mongoose.model('WeeklyMenu', WeeklyMenuSchema);
 
 module.exports = WeeklyMenu;

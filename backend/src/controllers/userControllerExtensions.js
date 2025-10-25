@@ -8,10 +8,8 @@ const userControllerExtensions = {
   async getProfile(req, res) {
     try {
       const userId = req.user.userId || req.user.id || req.user.user_id;
-      
-      const user = await User.findByPk(userId, {
-        attributes: { exclude: ['password', 'deletedAt'] }
-      });
+
+      const user = await User.findById(userId).select('-password -deletedAt');
 
       if (!user) {
         return res.status(404).json({
@@ -22,10 +20,8 @@ const userControllerExtensions = {
 
       // Get active subscription if exists
       const subscription = await Subscription.findOne({
-        where: { 
-          user_id: userId, 
-          status: 'active' 
-        }
+        user_id: userId,
+        status: 'active'
       });
 
       res.json({
@@ -48,10 +44,8 @@ const userControllerExtensions = {
   async getSettings(req, res) {
     try {
       const userId = req.user.userId || req.user.id || req.user.user_id;
-      
-      const user = await User.findByPk(userId, {
-        attributes: ['user_id', 'full_name', 'email', 'phone', 'preferences', 'email_verified', 'phone_verified', 'status', 'createdAt']
-      });
+
+      const user = await User.findById(userId).select('user_id full_name email phone preferences email_verified phone_verified status createdAt');
 
       if (!user) {
         return res.status(404).json({
@@ -97,8 +91,8 @@ const userControllerExtensions = {
       const userId = req.user.userId || req.user.id || req.user.user_id;
       const { preferences, notifications } = req.body;
 
-      const user = await User.findByPk(userId);
-      
+      const user = await User.findById(userId);
+
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -108,12 +102,11 @@ const userControllerExtensions = {
 
       // Update preferences if provided
       if (preferences) {
-        await user.update({
-          preferences: {
-            ...user.preferences,
-            ...preferences
-          }
-        });
+        user.preferences = {
+          ...user.preferences,
+          ...preferences
+        };
+        await user.save();
       }
 
       res.json({
@@ -144,10 +137,8 @@ const userControllerExtensions = {
       }
 
       const adminId = req.user.userId || req.user.id || req.user.user_id;
-      
-      const admin = await User.findByPk(adminId, {
-        attributes: ['user_id', 'full_name', 'email', 'phone', 'preferences', 'role', 'status']
-      });
+
+      const admin = await User.findById(adminId).select('user_id full_name email phone preferences role status');
 
       // Get system settings (mock data for now)
       const systemSettings = {
@@ -210,15 +201,14 @@ const userControllerExtensions = {
       const { preferences, system_settings } = req.body;
       const adminId = req.user.userId || req.user.id || req.user.user_id;
 
-      const admin = await User.findByPk(adminId);
+      const admin = await User.findById(adminId);
 
       if (preferences) {
-        await admin.update({
-          preferences: {
-            ...admin.preferences,
-            ...preferences
-          }
-        });
+        admin.preferences = {
+          ...admin.preferences,
+          ...preferences
+        };
+        await admin.save();
       }
 
       // In a real application, you would save system settings to a separate table or config

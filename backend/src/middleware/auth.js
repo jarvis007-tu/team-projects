@@ -7,7 +7,7 @@ const authenticate = async (req, res, next) => {
   try {
     // Extract token from header
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
@@ -40,7 +40,7 @@ const authenticate = async (req, res, next) => {
     // Try to get user from cache first if Redis is available
     const cacheKey = `user:${decoded.userId}`;
     let user = null;
-    
+
     try {
       if (redisClient && redisClient.isReady) {
         const cachedUser = await redisClient.get(cacheKey);
@@ -53,12 +53,10 @@ const authenticate = async (req, res, next) => {
     }
 
     if (!user) {
-      // If not in cache, fetch from database
-      user = await User.findByPk(decoded.userId, {
-        attributes: { exclude: ['password'] }
-      });
+      // If not in cache, fetch from database using MongoDB
+      const userDoc = await User.findById(decoded.userId).select('-password');
 
-      if (!user) {
+      if (!userDoc) {
         return res.status(401).json({
           success: false,
           message: 'User not found'
@@ -68,16 +66,14 @@ const authenticate = async (req, res, next) => {
       // Try to cache user for 5 minutes if Redis is available
       try {
         if (redisClient && redisClient.isReady) {
-          await redisClient.set(cacheKey, JSON.stringify(user.toJSON()), 300);
+          await redisClient.set(cacheKey, JSON.stringify(userDoc.toJSON()), { EX: 300 });
         }
       } catch (cacheError) {
         logger.debug('Failed to cache user, continuing without cache:', cacheError.message);
       }
-      
-      // Convert to plain object if it's a Sequelize instance
-      if (user.toJSON) {
-        user = user.toJSON();
-      }
+
+      // Convert to plain object
+      user = userDoc.toJSON();
     }
 
     // Check user status
@@ -124,7 +120,7 @@ const authorize = (...roles) => {
 
     // Flatten roles array in case arrays are passed as arguments
     const allowedRoles = roles.flat();
-    
+
     if (!allowedRoles.includes(req.user.role)) {
       logger.warn(`Unauthorized access attempt by user ${req.user.user_id} (role: ${req.user.role}) to ${req.originalUrl}. Required roles: ${allowedRoles.join(', ')}`);
       return res.status(403).json({
@@ -168,8 +164,8 @@ const refreshAuth = async (req, res, next) => {
       });
     }
 
-    // Get user
-    const user = await User.findByPk(decoded.userId);
+    // Get user using MongoDB
+    const user = await User.findById(decoded.userId);
     if (!user || user.status !== 'active') {
       return res.status(401).json({
         success: false,
@@ -177,7 +173,7 @@ const refreshAuth = async (req, res, next) => {
       });
     }
 
-    req.user = user;
+    req.user = user.toJSON();
     req.refreshToken = refreshToken;
     next();
   } catch (error) {
@@ -192,7 +188,7 @@ const refreshAuth = async (req, res, next) => {
 const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return next();
     }
@@ -201,12 +197,10 @@ const optionalAuth = async (req, res, next) => {
 
     try {
       const decoded = jwtManager.verifyAccessToken(token);
-      const user = await User.findByPk(decoded.userId, {
-        attributes: { exclude: ['password'] }
-      });
-      
+      const user = await User.findById(decoded.userId).select('-password');
+
       if (user && user.status === 'active') {
-        req.user = user;
+        req.user = user.toJSON();
       }
     } catch (error) {
       // Silent fail for optional auth
@@ -230,7 +224,7 @@ const deviceCheck = async (req, res, next) => {
     }
 
     const deviceId = req.headers['x-device-id'];
-    
+
     if (!deviceId) {
       return res.status(400).json({
         success: false,
@@ -247,11 +241,11 @@ const deviceCheck = async (req, res, next) => {
       });
     }
 
-    // If no device registered, update it
+    // If no device registered, update it using MongoDB
     if (!req.user.device_id) {
-      await User.update(
-        { device_id: deviceId },
-        { where: { user_id: req.user.user_id } }
+      await User.findByIdAndUpdate(
+        req.user.user_id,
+        { device_id: deviceId }
       );
       req.user.device_id = deviceId;
     }

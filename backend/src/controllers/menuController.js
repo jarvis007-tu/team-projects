@@ -1,4 +1,3 @@
-const { Op } = require('sequelize');
 const moment = require('moment');
 const WeeklyMenu = require('../models/WeeklyMenu');
 const logger = require('../utils/logger');
@@ -9,17 +8,12 @@ class MenuController {
     try {
       const { week_start_date, is_active = true } = req.query;
 
-      const whereConditions = {};
-      if (is_active !== undefined) whereConditions.is_active = is_active === 'true';
-      if (week_start_date) whereConditions.week_start_date = week_start_date;
+      const queryConditions = {};
+      if (is_active !== undefined) queryConditions.is_active = is_active === 'true';
+      if (week_start_date) queryConditions.week_start_date = week_start_date;
 
-      const menu = await WeeklyMenu.findAll({
-        where: whereConditions,
-        order: [
-          ['day', 'ASC'],
-          ['meal_type', 'ASC']
-        ]
-      });
+      const menu = await WeeklyMenu.find(queryConditions)
+        .sort({ day: 1, meal_type: 1 });
 
       // Group by day
       const groupedMenu = menu.reduce((acc, item) => {
@@ -51,13 +45,10 @@ class MenuController {
     try {
       const today = moment().format('dddd').toLowerCase();
 
-      const menu = await WeeklyMenu.findAll({
-        where: {
-          day: today,
-          is_active: true
-        },
-        order: [['meal_type', 'ASC']]
-      });
+      const menu = await WeeklyMenu.find({
+        day: today,
+        is_active: true
+      }).sort({ meal_type: 1 });
 
       const todayMenu = menu.reduce((acc, item) => {
         acc[item.meal_type] = {
@@ -91,21 +82,18 @@ class MenuController {
 
       // Check if menu item exists
       let menuItem = await WeeklyMenu.findOne({
-        where: {
-          day,
-          meal_type,
-          is_active: true
-        }
+        day,
+        meal_type,
+        is_active: true
       });
 
       if (menuItem) {
         // Update existing
-        await menuItem.update({
-          items: JSON.stringify(items),
-          special_note,
-          week_start_date,
-          created_by: req.user.id
-        });
+        menuItem.items = JSON.stringify(items);
+        menuItem.special_note = special_note;
+        menuItem.week_start_date = week_start_date;
+        menuItem.created_by = req.user.id;
+        await menuItem.save();
       } else {
         // Create new
         menuItem = await WeeklyMenu.create({
@@ -139,9 +127,9 @@ class MenuController {
       const { menu, week_start_date } = req.body;
 
       // Deactivate old menu
-      await WeeklyMenu.update(
-        { is_active: false },
-        { where: { is_active: true } }
+      await WeeklyMenu.updateMany(
+        { is_active: true },
+        { is_active: false }
       );
 
       // Create new menu items
@@ -158,14 +146,12 @@ class MenuController {
             special_note: menu[day][meal_type].special_note,
             week_start_date,
             is_active: true,
-            created_by: req.user.id,
-            createdAt: new Date(),
-            updatedAt: new Date()
+            created_by: req.user.id
           });
         }
       }
 
-      await WeeklyMenu.bulkCreate(menuItems);
+      await WeeklyMenu.insertMany(menuItems);
 
       res.json({
         success: true,
@@ -185,7 +171,7 @@ class MenuController {
     try {
       const { id } = req.params;
 
-      const menuItem = await WeeklyMenu.findByPk(id);
+      const menuItem = await WeeklyMenu.findByIdAndDelete(id);
 
       if (!menuItem) {
         return res.status(404).json({
@@ -193,8 +179,6 @@ class MenuController {
           message: 'Menu item not found'
         });
       }
-
-      await menuItem.destroy();
 
       res.json({
         success: true,
@@ -213,24 +197,29 @@ class MenuController {
   async getMenuHistory(req, res) {
     try {
       const { page = 1, limit = 10 } = req.query;
-      const offset = (page - 1) * limit;
+      const skip = (page - 1) * limit;
 
-      const { count, rows } = await WeeklyMenu.findAndCountAll({
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        order: [['createdAt', 'DESC']],
-        group: ['week_start_date', 'is_active'],
-        distinct: true
-      });
+      const [history, count] = await Promise.all([
+        WeeklyMenu.aggregate([
+          { $group: { _id: { week_start_date: '$week_start_date', is_active: '$is_active' } } },
+          { $sort: { '_id.week_start_date': -1 } },
+          { $skip: skip },
+          { $limit: parseInt(limit) }
+        ]),
+        WeeklyMenu.aggregate([
+          { $group: { _id: { week_start_date: '$week_start_date', is_active: '$is_active' } } },
+          { $count: 'total' }
+        ])
+      ]);
 
       res.json({
         success: true,
         data: {
-          history: rows,
+          history,
           pagination: {
-            total: count.length,
+            total: count.length > 0 ? count[0].total : 0,
             page: parseInt(page),
-            pages: Math.ceil(count.length / limit)
+            pages: Math.ceil((count.length > 0 ? count[0].total : 0) / limit)
           }
         }
       });
@@ -249,15 +238,15 @@ class MenuController {
       const { week_start_date } = req.body;
 
       // Deactivate all menus
-      await WeeklyMenu.update(
-        { is_active: false },
-        { where: { is_active: true } }
+      await WeeklyMenu.updateMany(
+        { is_active: true },
+        { is_active: false }
       );
 
       // Activate specified version
-      await WeeklyMenu.update(
-        { is_active: true },
-        { where: { week_start_date } }
+      await WeeklyMenu.updateMany(
+        { week_start_date },
+        { is_active: true }
       );
 
       res.json({
@@ -279,12 +268,10 @@ class MenuController {
       const { date } = req.query;
       const dayName = moment(date).format('dddd').toLowerCase();
 
-      const menu = await WeeklyMenu.findAll({
-        where: {
-          day: dayName,
-          is_active: true,
-          special_note: { [Op.ne]: null }
-        }
+      const menu = await WeeklyMenu.find({
+        day: dayName,
+        is_active: true,
+        special_note: { $ne: null }
       });
 
       res.json({

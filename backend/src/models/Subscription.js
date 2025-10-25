@@ -1,134 +1,122 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 const moment = require('moment-timezone');
 
-const Subscription = sequelize.define('Subscription', {
-  subscription_id: {
-    type: DataTypes.BIGINT,
-    primaryKey: true,
-    autoIncrement: true
-  },
+const SubscriptionSchema = new mongoose.Schema({
   user_id: {
-    type: DataTypes.BIGINT,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'user_id'
-    }
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, 'User ID is required']
   },
   plan_type: {
-    type: DataTypes.ENUM('daily', 'weekly', 'monthly', 'quarterly', 'yearly'),
-    allowNull: false,
-    defaultValue: 'monthly'
+    type: String,
+    enum: {
+      values: ['daily', 'weekly', 'monthly', 'quarterly', 'yearly'],
+      message: '{VALUE} is not a valid plan type'
+    },
+    required: true,
+    default: 'monthly'
   },
   plan_name: {
-    type: DataTypes.STRING(100),
-    allowNull: true
+    type: String,
+    trim: true,
+    maxlength: [100, 'Plan name must not exceed 100 characters']
   },
   amount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    validate: {
-      min: 0
-    }
+    type: Number,
+    required: [true, 'Amount is required'],
+    min: [0, 'Amount cannot be negative']
   },
   start_date: {
-    type: DataTypes.DATEONLY,
-    allowNull: false,
-    validate: {
-      isDate: true
-    }
+    type: Date,
+    required: [true, 'Start date is required']
   },
   end_date: {
-    type: DataTypes.DATEONLY,
-    allowNull: false,
+    type: Date,
+    required: [true, 'End date is required'],
     validate: {
-      isDate: true,
-      isAfterStartDate(value) {
-        if (value <= this.start_date) {
-          throw new Error('End date must be after start date');
-        }
-      }
+      validator: function(value) {
+        return value > this.start_date;
+      },
+      message: 'End date must be after start date'
     }
   },
   status: {
-    type: DataTypes.ENUM('active', 'paused', 'expired', 'cancelled', 'pending'),
-    defaultValue: 'pending',
-    allowNull: false
+    type: String,
+    enum: {
+      values: ['active', 'paused', 'expired', 'cancelled', 'pending'],
+      message: '{VALUE} is not a valid status'
+    },
+    default: 'pending'
   },
   payment_status: {
-    type: DataTypes.ENUM('paid', 'pending', 'failed', 'refunded'),
-    defaultValue: 'pending'
+    type: String,
+    enum: {
+      values: ['paid', 'pending', 'failed', 'refunded'],
+      message: '{VALUE} is not a valid payment status'
+    },
+    default: 'pending'
   },
   payment_method: {
-    type: DataTypes.ENUM('cash', 'upi', 'card', 'netbanking', 'wallet'),
-    allowNull: true
+    type: String,
+    enum: {
+      values: ['cash', 'upi', 'card', 'netbanking', 'wallet', null],
+      message: '{VALUE} is not a valid payment method'
+    },
+    default: null
   },
   payment_reference: {
-    type: DataTypes.STRING(100),
-    allowNull: true
+    type: String,
+    maxlength: [100, 'Payment reference must not exceed 100 characters']
   },
   auto_renewal: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
+    type: Boolean,
+    default: false
   },
   meals_included: {
-    type: DataTypes.JSON,
-    defaultValue: {
+    type: Object,
+    default: {
       breakfast: true,
       lunch: true,
       dinner: true
     }
   },
   special_requirements: {
-    type: DataTypes.TEXT,
-    allowNull: true
+    type: String
   },
   notes: {
-    type: DataTypes.TEXT,
-    allowNull: true
+    type: String
+  },
+  deleted_at: {
+    type: Date,
+    default: null
   }
 }, {
-  tableName: 'subscriptions',
   timestamps: true,
-  paranoid: true,
-  indexes: [
-    {
-      fields: ['user_id']
-    },
-    {
-      fields: ['status']
-    },
-    {
-      fields: ['start_date']
-    },
-    {
-      fields: ['end_date']
-    },
-    {
-      fields: ['plan_type']
-    },
-    {
-      fields: ['payment_status']
-    },
-    {
-      name: 'idx_active_subscription',
-      fields: ['user_id', 'status', 'start_date', 'end_date']
-    }
-  ],
-  hooks: {
-    beforeCreate: (subscription) => {
-      subscription.validateDates();
-    },
-    beforeUpdate: (subscription) => {
-      subscription.validateDates();
-      subscription.updateStatus();
-    }
+  collection: 'subscriptions'
+});
+
+// Indexes
+SubscriptionSchema.index({ user_id: 1 });
+SubscriptionSchema.index({ status: 1 });
+SubscriptionSchema.index({ start_date: 1 });
+SubscriptionSchema.index({ end_date: 1 });
+SubscriptionSchema.index({ plan_type: 1 });
+SubscriptionSchema.index({ payment_status: 1 });
+SubscriptionSchema.index({ user_id: 1, status: 1, start_date: 1, end_date: 1 }); // Composite index
+
+// Pre-save validation
+SubscriptionSchema.pre('save', function(next) {
+  try {
+    this.validateDates();
+    this.updateStatus();
+    next();
+  } catch (error) {
+    next(error);
   }
 });
 
-// Instance methods
-Subscription.prototype.validateDates = function() {
+// Instance method to validate dates
+SubscriptionSchema.methods.validateDates = function() {
   const today = moment().tz('Asia/Kolkata').startOf('day');
   const startDate = moment(this.start_date).tz('Asia/Kolkata').startOf('day');
   const endDate = moment(this.end_date).tz('Asia/Kolkata').startOf('day');
@@ -138,7 +126,8 @@ Subscription.prototype.validateDates = function() {
   }
 };
 
-Subscription.prototype.updateStatus = function() {
+// Instance method to update status
+SubscriptionSchema.methods.updateStatus = function() {
   const today = moment().tz('Asia/Kolkata').startOf('day');
   const startDate = moment(this.start_date).tz('Asia/Kolkata').startOf('day');
   const endDate = moment(this.end_date).tz('Asia/Kolkata').startOf('day');
@@ -154,32 +143,78 @@ Subscription.prototype.updateStatus = function() {
   }
 };
 
-Subscription.prototype.isActive = function() {
+// Instance method to check if subscription is active
+SubscriptionSchema.methods.isActive = function() {
   const today = moment().tz('Asia/Kolkata').startOf('day');
   const startDate = moment(this.start_date).tz('Asia/Kolkata').startOf('day');
   const endDate = moment(this.end_date).tz('Asia/Kolkata').startOf('day');
 
-  return this.status === 'active' && 
+  return this.status === 'active' &&
          this.payment_status === 'paid' &&
          today.isBetween(startDate, endDate, null, '[]');
 };
 
-Subscription.prototype.canAccessMeal = function(mealType) {
+// Instance method to check if user can access meal
+SubscriptionSchema.methods.canAccessMeal = function(mealType) {
   if (!this.isActive()) return false;
   return this.meals_included[mealType] === true;
 };
 
-Subscription.prototype.getDaysRemaining = function() {
+// Instance method to get days remaining
+SubscriptionSchema.methods.getDaysRemaining = function() {
   const today = moment().tz('Asia/Kolkata').startOf('day');
   const endDate = moment(this.end_date).tz('Asia/Kolkata').startOf('day');
   const days = endDate.diff(today, 'days');
   return days > 0 ? days : 0;
 };
 
-Subscription.prototype.extendSubscription = async function(days) {
+// Instance method to extend subscription
+SubscriptionSchema.methods.extendSubscription = async function(days) {
   const currentEndDate = moment(this.end_date).tz('Asia/Kolkata');
-  this.end_date = currentEndDate.add(days, 'days').format('YYYY-MM-DD');
+  this.end_date = currentEndDate.add(days, 'days').toDate();
   await this.save();
 };
+
+// Soft delete method
+SubscriptionSchema.methods.softDelete = async function() {
+  this.deleted_at = new Date();
+  await this.save();
+};
+
+// Restore method
+SubscriptionSchema.methods.restore = async function() {
+  this.deleted_at = null;
+  await this.save();
+};
+
+// Override toJSON to rename _id to subscription_id
+SubscriptionSchema.methods.toJSON = function() {
+  const subscriptionObject = this.toObject();
+  delete subscriptionObject.__v;
+
+  // Rename _id to subscription_id for consistency
+  if (subscriptionObject._id) {
+    subscriptionObject.subscription_id = subscriptionObject._id;
+    delete subscriptionObject._id;
+  }
+
+  // Convert user_id ObjectId to string for frontend
+  if (subscriptionObject.user_id) {
+    subscriptionObject.user_id = subscriptionObject.user_id.toString();
+  }
+
+  return subscriptionObject;
+};
+
+// Static methods for finding active records
+SubscriptionSchema.statics.findActive = function(conditions = {}) {
+  return this.find({ ...conditions, deleted_at: null });
+};
+
+SubscriptionSchema.statics.findOneActive = function(conditions = {}) {
+  return this.findOne({ ...conditions, deleted_at: null });
+};
+
+const Subscription = mongoose.model('Subscription', SubscriptionSchema);
 
 module.exports = Subscription;

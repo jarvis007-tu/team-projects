@@ -1,4 +1,3 @@
-const { Op } = require('sequelize');
 const WeeklyMenu = require('../models/WeeklyMenu');
 const logger = require('../utils/logger');
 
@@ -8,25 +7,25 @@ const menuExtensions = {
   async getMenuItems(req, res) {
     try {
       const { category, search, page = 1, limit = 10 } = req.query;
-      const offset = (page - 1) * limit;
+      const skip = (page - 1) * limit;
 
       const whereConditions = { is_active: true };
-      
+
       if (search) {
         whereConditions.items = {
-          [Op.like]: `%${search}%`
+          $regex: search,
+          $options: 'i'
         };
       }
 
-      const menuItems = await WeeklyMenu.findAndCountAll({
-        where: whereConditions,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        order: [['day', 'ASC'], ['meal_type', 'ASC']]
-      });
+      const total = await WeeklyMenu.countDocuments(whereConditions);
+      const menuItems = await WeeklyMenu.find(whereConditions)
+        .limit(parseInt(limit))
+        .skip(parseInt(skip))
+        .sort({ day: 1, meal_type: 1 });
 
       // Transform the data to match frontend expectations
-      const transformedItems = menuItems.rows.map(item => ({
+      const transformedItems = menuItems.map(item => ({
         id: item.menu_id,
         name: item.meal_type + ' - ' + item.day,
         items: JSON.parse(item.items || '[]'),
@@ -48,9 +47,9 @@ const menuExtensions = {
         success: true,
         data: transformedItems,
         pagination: {
-          total: menuItems.count,
+          total: total,
           page: parseInt(page),
-          pages: Math.ceil(menuItems.count / limit)
+          pages: Math.ceil(total / limit)
         }
       });
     } catch (error) {
@@ -108,7 +107,7 @@ const menuExtensions = {
       const { id } = req.params;
       const { name, items, category, day, special_note, is_available, nutrition } = req.body;
 
-      const menuItem = await WeeklyMenu.findByPk(id);
+      const menuItem = await WeeklyMenu.findById(id);
 
       if (!menuItem) {
         return res.status(404).json({
@@ -117,17 +116,17 @@ const menuExtensions = {
         });
       }
 
-      await menuItem.update({
-        day: day || menuItem.day,
-        meal_type: category || menuItem.meal_type,
-        items: items ? JSON.stringify(items) : menuItem.items,
-        special_note: special_note !== undefined ? special_note : menuItem.special_note,
-        is_active: is_available !== undefined ? is_available : menuItem.is_active,
-        calories: nutrition?.calories || menuItem.calories,
-        protein: nutrition?.protein || menuItem.protein,
-        carbs: nutrition?.carbs || menuItem.carbs,
-        fat: nutrition?.fat || menuItem.fat
-      });
+      menuItem.day = day || menuItem.day;
+      menuItem.meal_type = category || menuItem.meal_type;
+      menuItem.items = items ? JSON.stringify(items) : menuItem.items;
+      menuItem.special_note = special_note !== undefined ? special_note : menuItem.special_note;
+      menuItem.is_active = is_available !== undefined ? is_available : menuItem.is_active;
+      menuItem.calories = nutrition?.calories || menuItem.calories;
+      menuItem.protein = nutrition?.protein || menuItem.protein;
+      menuItem.carbs = nutrition?.carbs || menuItem.carbs;
+      menuItem.fat = nutrition?.fat || menuItem.fat;
+
+      await menuItem.save();
 
       res.json({
         success: true,
@@ -314,9 +313,9 @@ const menuExtensions = {
   async getNutritionalInfo(req, res) {
     try {
       const { id } = req.params;
-      
-      const menuItem = await WeeklyMenu.findByPk(id);
-      
+
+      const menuItem = await WeeklyMenu.findById(id);
+
       if (!menuItem) {
         return res.status(404).json({
           success: false,
@@ -347,9 +346,9 @@ const menuExtensions = {
     try {
       const { id } = req.params;
       const { calories, protein, carbs, fat } = req.body;
-      
-      const menuItem = await WeeklyMenu.findByPk(id);
-      
+
+      const menuItem = await WeeklyMenu.findById(id);
+
       if (!menuItem) {
         return res.status(404).json({
           success: false,
@@ -357,12 +356,12 @@ const menuExtensions = {
         });
       }
 
-      await menuItem.update({
-        calories,
-        protein,
-        carbs,
-        fat
-      });
+      menuItem.calories = calories;
+      menuItem.protein = protein;
+      menuItem.carbs = carbs;
+      menuItem.fat = fat;
+
+      await menuItem.save();
 
       res.json({
         success: true,
@@ -387,10 +386,10 @@ const menuExtensions = {
   async uploadMenuImage(req, res) {
     try {
       const { id } = req.params;
-      
+
       // Mock implementation
       // In production, you would handle file upload and storage
-      
+
       res.json({
         success: true,
         message: 'Image uploaded successfully',
@@ -411,19 +410,18 @@ const menuExtensions = {
   async exportMenu(req, res) {
     try {
       const { startDate, endDate } = req.query;
-      
-      const menuItems = await WeeklyMenu.findAll({
-        where: {
-          is_active: true,
-          createdAt: {
-            [Op.between]: [startDate || new Date(), endDate || new Date()]
-          }
+
+      const menuItems = await WeeklyMenu.find({
+        is_active: true,
+        createdAt: {
+          $gte: startDate || new Date(),
+          $lte: endDate || new Date()
         }
       });
 
       // Mock CSV export
-      const csv = 'Day,Meal Type,Items,Special Note\n' + 
-        menuItems.map(item => 
+      const csv = 'Day,Meal Type,Items,Special Note\n' +
+        menuItems.map(item =>
           `${item.day},${item.meal_type},"${item.items}","${item.special_note || ''}"`
         ).join('\n');
 
@@ -444,7 +442,7 @@ const menuExtensions = {
     try {
       // Mock implementation
       // In production, you would parse the uploaded file and import menu items
-      
+
       res.json({
         success: true,
         message: 'Menu imported successfully',
@@ -467,13 +465,10 @@ const menuExtensions = {
     try {
       const { startDate } = req.params;
       const weekStart = new Date(startDate);
-      
-      const menuItems = await WeeklyMenu.findAll({
-        where: {
-          is_active: true
-        },
-        order: [['day', 'ASC'], ['meal_type', 'ASC']]
-      });
+
+      const menuItems = await WeeklyMenu.find({
+        is_active: true
+      }).sort({ day: 1, meal_type: 1 });
 
       const preview = menuItems.reduce((acc, item) => {
         if (!acc[item.day]) {

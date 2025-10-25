@@ -1,4 +1,4 @@
-const { Op } = require('sequelize');
+const mongoose = require('mongoose');
 const moment = require('moment');
 const geolib = require('geolib');
 const User = require('../models/User');
@@ -7,12 +7,12 @@ const Attendance = require('../models/Attendance');
 const MealConfirmation = require('../models/MealConfirmation');
 const logger = require('../utils/logger');
 const { verifyQRCode } = require('../services/qrService');
-const { sequelize } = require('../config/database');
 
 class AttendanceController {
   // Scan QR code for attendance
   async scanQR(req, res) {
-    const transaction = await sequelize.transaction();
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
     try {
       const { qr_code, geo_location, device_id } = req.body;
@@ -20,9 +20,10 @@ class AttendanceController {
 
       // Verify QR code
       const qrData = await verifyQRCode(qr_code);
-      
+
       if (!qrData.valid) {
-        await transaction.rollback();
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({
           success: false,
           message: qrData.message || 'Invalid QR code'
@@ -30,17 +31,17 @@ class AttendanceController {
       }
 
       // Check active subscription
+      const today = moment().format('YYYY-MM-DD');
       const subscription = await Subscription.findOne({
-        where: {
-          user_id: userId,
-          status: 'active',
-          start_date: { [Op.lte]: moment().format('YYYY-MM-DD') },
-          end_date: { [Op.gte]: moment().format('YYYY-MM-DD') }
-        }
-      });
+        user_id: userId,
+        status: 'active',
+        start_date: { $lte: today },
+        end_date: { $gte: today }
+      }).session(session);
 
       if (!subscription) {
-        await transaction.rollback();
+        await session.abortTransaction();
+        session.endSession();
         return res.status(403).json({
           success: false,
           message: 'No active subscription found'
@@ -55,9 +56,10 @@ class AttendanceController {
         );
 
         const maxRadius = parseInt(process.env.MESS_RADIUS_METERS) || 200;
-        
+
         if (distance > maxRadius) {
-          await transaction.rollback();
+          await session.abortTransaction();
+          session.endSession();
           return res.status(403).json({
             success: false,
             message: 'You are outside the mess premises'
@@ -66,17 +68,15 @@ class AttendanceController {
       }
 
       // Check for duplicate scan
-      const today = moment().format('YYYY-MM-DD');
       const existingAttendance = await Attendance.findOne({
-        where: {
-          user_id: userId,
-          scan_date: today,
-          meal_type: qrData.meal_type
-        }
-      });
+        user_id: userId,
+        scan_date: today,
+        meal_type: qrData.meal_type
+      }).session(session);
 
       if (existingAttendance) {
-        await transaction.rollback();
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({
           success: false,
           message: 'Attendance already marked for this meal'
@@ -86,16 +86,15 @@ class AttendanceController {
       // Check meal confirmation if required
       if (process.env.REQUIRE_MEAL_CONFIRMATION === 'true') {
         const confirmation = await MealConfirmation.findOne({
-          where: {
-            user_id: userId,
-            meal_date: today,
-            meal_type: qrData.meal_type,
-            status: 'confirmed'
-          }
-        });
+          user_id: userId,
+          meal_date: today,
+          meal_type: qrData.meal_type,
+          status: 'confirmed'
+        }).session(session);
 
         if (!confirmation) {
-          await transaction.rollback();
+          await session.abortTransaction();
+          session.endSession();
           return res.status(403).json({
             success: false,
             message: 'Please confirm your meal attendance first'
@@ -103,11 +102,12 @@ class AttendanceController {
         }
 
         // Update confirmation status
-        await confirmation.update({ status: 'attended' }, { transaction });
+        confirmation.status = 'attended';
+        await confirmation.save({ session });
       }
 
       // Create attendance record
-      const attendance = await Attendance.create({
+      const attendance = await Attendance.create([{
         user_id: userId,
         subscription_id: subscription.subscription_id,
         scan_date: today,
@@ -117,17 +117,19 @@ class AttendanceController {
         geo_location,
         device_id,
         is_valid: true
-      }, { transaction });
+      }], { session });
 
-      await transaction.commit();
+      await session.commitTransaction();
+      session.endSession();
 
       res.json({
         success: true,
         message: 'Attendance marked successfully',
-        data: attendance
+        data: attendance[0]
       });
     } catch (error) {
-      await transaction.rollback();
+      await session.abortTransaction();
+      session.endSession();
       logger.error('Error scanning QR:', error);
       res.status(500).json({
         success: false,
@@ -143,27 +145,23 @@ class AttendanceController {
       const { start_date, end_date, meal_type, page = 1, limit = 10 } = req.query;
       const offset = (page - 1) * limit;
 
-      const whereConditions = {};
-      if (userId) whereConditions.user_id = userId;
-      if (meal_type) whereConditions.meal_type = meal_type;
-      
+      const filter = {};
+      if (userId) filter.user_id = userId;
+      if (meal_type) filter.meal_type = meal_type;
+
       if (start_date && end_date) {
-        whereConditions.scan_date = {
-          [Op.between]: [start_date, end_date]
+        filter.scan_date = {
+          $gte: start_date,
+          $lte: end_date
         };
       }
 
-      const { count, rows } = await Attendance.findAndCountAll({
-        where: whereConditions,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'full_name', 'email']
-        }],
-        order: [['scan_time', 'DESC']]
-      });
+      const count = await Attendance.countDocuments(filter);
+      const rows = await Attendance.find(filter)
+        .limit(parseInt(limit))
+        .skip(parseInt(offset))
+        .populate('user_id', 'user_id full_name email')
+        .sort({ scan_time: -1 });
 
       res.json({
         success: true,
@@ -191,35 +189,35 @@ class AttendanceController {
       const today = moment().format('YYYY-MM-DD');
       const { meal_type } = req.query;
 
-      const whereConditions = { scan_date: today };
-      if (meal_type) whereConditions.meal_type = meal_type;
+      const filter = { scan_date: today };
+      if (meal_type) filter.meal_type = meal_type;
 
-      const attendance = await Attendance.findAll({
-        where: whereConditions,
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'full_name', 'email', 'phone']
-        }],
-        order: [['scan_time', 'DESC']]
-      });
+      const attendance = await Attendance.find(filter)
+        .populate('user_id', 'user_id full_name email phone')
+        .sort({ scan_time: -1 });
 
       // Get meal-wise count
-      const mealCounts = await Attendance.findAll({
-        attributes: [
-          'meal_type',
-          [sequelize.fn('COUNT', sequelize.col('attendance_id')), 'count']
-        ],
-        where: { scan_date: today },
-        group: ['meal_type']
-      });
+      const mealCounts = await Attendance.aggregate([
+        { $match: { scan_date: today } },
+        {
+          $group: {
+            _id: '$meal_type',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+
+      const formattedMealCounts = mealCounts.map(item => ({
+        meal_type: item._id,
+        count: item.count
+      }));
 
       res.json({
         success: true,
         data: {
           date: today,
           attendance,
-          summary: mealCounts,
+          summary: formattedMealCounts,
           total: attendance.length
         }
       });
@@ -236,58 +234,77 @@ class AttendanceController {
   async getAttendanceStats(req, res) {
     try {
       const { start_date, end_date } = req.query;
-      
-      const whereConditions = {};
+
+      const filter = {};
       if (start_date && end_date) {
-        whereConditions.scan_date = {
-          [Op.between]: [start_date, end_date]
+        filter.scan_date = {
+          $gte: start_date,
+          $lte: end_date
         };
       } else {
         // Default to last 30 days
-        whereConditions.scan_date = {
-          [Op.gte]: moment().subtract(30, 'days').format('YYYY-MM-DD')
+        filter.scan_date = {
+          $gte: moment().subtract(30, 'days').format('YYYY-MM-DD')
         };
       }
 
       // Daily attendance trend
-      const dailyTrend = await Attendance.findAll({
-        attributes: [
-          'scan_date',
-          [sequelize.fn('COUNT', sequelize.col('attendance_id')), 'count']
-        ],
-        where: whereConditions,
-        group: ['scan_date'],
-        order: [['scan_date', 'ASC']]
-      });
+      const dailyTrend = await Attendance.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: '$scan_date',
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ]);
+
+      const formattedDailyTrend = dailyTrend.map(item => ({
+        scan_date: item._id,
+        count: item.count
+      }));
 
       // Meal-wise distribution
-      const mealDistribution = await Attendance.findAll({
-        attributes: [
-          'meal_type',
-          [sequelize.fn('COUNT', sequelize.col('attendance_id')), 'count']
-        ],
-        where: whereConditions,
-        group: ['meal_type']
-      });
+      const mealDistribution = await Attendance.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: '$meal_type',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+
+      const formattedMealDistribution = mealDistribution.map(item => ({
+        meal_type: item._id,
+        count: item.count
+      }));
 
       // Peak hours
-      const peakHours = await Attendance.findAll({
-        attributes: [
-          [sequelize.fn('HOUR', sequelize.col('scan_time')), 'hour'],
-          [sequelize.fn('COUNT', sequelize.col('attendance_id')), 'count']
-        ],
-        where: whereConditions,
-        group: [sequelize.fn('HOUR', sequelize.col('scan_time'))],
-        order: [[sequelize.fn('COUNT', sequelize.col('attendance_id')), 'DESC']],
-        limit: 5
-      });
+      const peakHours = await Attendance.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: { $hour: '$scan_time' },
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { count: -1 } },
+        { $limit: 5 }
+      ]);
+
+      const formattedPeakHours = peakHours.map(item => ({
+        hour: item._id,
+        count: item.count
+      }));
 
       res.json({
         success: true,
         data: {
-          dailyTrend,
-          mealDistribution,
-          peakHours
+          dailyTrend: formattedDailyTrend,
+          mealDistribution: formattedMealDistribution,
+          peakHours: formattedPeakHours
         }
       });
     } catch (error) {
@@ -301,15 +318,17 @@ class AttendanceController {
 
   // Mark manual attendance (Admin only)
   async markManualAttendance(req, res) {
-    const transaction = await sequelize.transaction();
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
     try {
       const { user_id, meal_type, scan_date, reason } = req.body;
 
       // Check if user exists
-      const user = await User.findByPk(user_id);
+      const user = await User.findById(user_id).session(session);
       if (!user) {
-        await transaction.rollback();
+        await session.abortTransaction();
+        session.endSession();
         return res.status(404).json({
           success: false,
           message: 'User not found'
@@ -318,15 +337,14 @@ class AttendanceController {
 
       // Check for duplicate
       const existingAttendance = await Attendance.findOne({
-        where: {
-          user_id,
-          scan_date: scan_date || moment().format('YYYY-MM-DD'),
-          meal_type
-        }
-      });
+        user_id,
+        scan_date: scan_date || moment().format('YYYY-MM-DD'),
+        meal_type
+      }).session(session);
 
       if (existingAttendance) {
-        await transaction.rollback();
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({
           success: false,
           message: 'Attendance already marked'
@@ -334,35 +352,36 @@ class AttendanceController {
       }
 
       // Get active subscription
+      const targetDate = scan_date || moment().format('YYYY-MM-DD');
       const subscription = await Subscription.findOne({
-        where: {
-          user_id,
-          status: 'active',
-          start_date: { [Op.lte]: scan_date || moment().format('YYYY-MM-DD') },
-          end_date: { [Op.gte]: scan_date || moment().format('YYYY-MM-DD') }
-        }
-      });
+        user_id,
+        status: 'active',
+        start_date: { $lte: targetDate },
+        end_date: { $gte: targetDate }
+      }).session(session);
 
-      const attendance = await Attendance.create({
+      const attendance = await Attendance.create([{
         user_id,
         subscription_id: subscription?.subscription_id,
-        scan_date: scan_date || moment().format('YYYY-MM-DD'),
+        scan_date: targetDate,
         meal_type,
         scan_time: new Date(),
         qr_code: 'MANUAL_ENTRY',
         validation_errors: `Manual entry by admin: ${reason || 'No reason provided'}`,
         is_valid: true
-      }, { transaction });
+      }], { session });
 
-      await transaction.commit();
+      await session.commitTransaction();
+      session.endSession();
 
       res.json({
         success: true,
         message: 'Manual attendance marked successfully',
-        data: attendance
+        data: attendance[0]
       });
     } catch (error) {
-      await transaction.rollback();
+      await session.abortTransaction();
+      session.endSession();
       logger.error('Error marking manual attendance:', error);
       res.status(500).json({
         success: false,
@@ -376,8 +395,8 @@ class AttendanceController {
     try {
       const { id } = req.params;
 
-      const attendance = await Attendance.findByPk(id);
-      
+      const attendance = await Attendance.findById(id);
+
       if (!attendance) {
         return res.status(404).json({
           success: false,
@@ -385,7 +404,7 @@ class AttendanceController {
         });
       }
 
-      await attendance.destroy();
+      await attendance.deleteOne();
 
       res.json({
         success: true,
@@ -405,28 +424,23 @@ class AttendanceController {
     try {
       const { start_date, end_date, format = 'csv' } = req.query;
 
-      const whereConditions = {};
+      const filter = {};
       if (start_date && end_date) {
-        whereConditions.scan_date = {
-          [Op.between]: [start_date, end_date]
+        filter.scan_date = {
+          $gte: start_date,
+          $lte: end_date
         };
       }
 
-      const attendance = await Attendance.findAll({
-        where: whereConditions,
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['full_name', 'email', 'phone']
-        }],
-        order: [['scan_date', 'DESC'], ['scan_time', 'DESC']]
-      });
+      const attendance = await Attendance.find(filter)
+        .populate('user_id', 'full_name email phone')
+        .sort({ scan_date: -1, scan_time: -1 });
 
       if (format === 'csv') {
         const csv = [
           'Date,Time,User Name,Email,Phone,Meal Type,Status',
-          ...attendance.map(a => 
-            `${a.scan_date},${moment(a.scan_time).format('HH:mm:ss')},${a.user.full_name},${a.user.email},${a.user.phone},${a.meal_type},${a.is_valid ? 'Valid' : 'Invalid'}`
+          ...attendance.map(a =>
+            `${a.scan_date},${moment(a.scan_time).format('HH:mm:ss')},${a.user_id.full_name},${a.user_id.email},${a.user_id.phone},${a.meal_type},${a.is_valid ? 'Valid' : 'Invalid'}`
           )
         ].join('\n');
 
@@ -454,32 +468,25 @@ class AttendanceController {
       const { page = 1, limit = 10, date, meal_type, user_id } = req.query;
       const offset = (page - 1) * limit;
 
-      const whereConditions = {};
-      
+      const filter = {};
+
       if (date) {
         const targetDate = moment(date);
-        whereConditions.scan_time = {
-          [Op.between]: [
-            targetDate.startOf('day').toDate(),
-            targetDate.endOf('day').toDate()
-          ]
+        filter.scan_time = {
+          $gte: targetDate.startOf('day').toDate(),
+          $lte: targetDate.endOf('day').toDate()
         };
       }
-      
-      if (meal_type) whereConditions.meal_type = meal_type;
-      if (user_id) whereConditions.user_id = user_id;
 
-      const { count, rows } = await Attendance.findAndCountAll({
-        where: whereConditions,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'full_name', 'email']
-        }],
-        order: [['scan_time', 'DESC']]
-      });
+      if (meal_type) filter.meal_type = meal_type;
+      if (user_id) filter.user_id = user_id;
+
+      const count = await Attendance.countDocuments(filter);
+      const rows = await Attendance.find(filter)
+        .limit(parseInt(limit))
+        .skip(parseInt(offset))
+        .populate('user_id', 'user_id full_name email')
+        .sort({ scan_time: -1 });
 
       res.json({
         success: true,
@@ -507,22 +514,14 @@ class AttendanceController {
       const { date } = req.params;
       const targetDate = moment(date);
 
-      const attendance = await Attendance.findAll({
-        where: {
-          scan_time: {
-            [Op.between]: [
-              targetDate.startOf('day').toDate(),
-              targetDate.endOf('day').toDate()
-            ]
-          }
-        },
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'full_name', 'email', 'phone']
-        }],
-        order: [['scan_time', 'DESC']]
-      });
+      const attendance = await Attendance.find({
+        scan_time: {
+          $gte: targetDate.startOf('day').toDate(),
+          $lte: targetDate.endOf('day').toDate()
+        }
+      })
+        .populate('user_id', 'user_id full_name email phone')
+        .sort({ scan_time: -1 });
 
       const summary = {
         breakfast: attendance.filter(a => a.meal_type === 'breakfast'),
@@ -559,7 +558,7 @@ class AttendanceController {
       const { id } = req.params;
       const updates = req.body;
 
-      const attendance = await Attendance.findByPk(id);
+      const attendance = await Attendance.findById(id);
 
       if (!attendance) {
         return res.status(404).json({
@@ -568,7 +567,8 @@ class AttendanceController {
         });
       }
 
-      await attendance.update(updates);
+      Object.assign(attendance, updates);
+      await attendance.save();
 
       res.json({
         success: true,
@@ -586,13 +586,15 @@ class AttendanceController {
 
   // Bulk mark attendance
   async bulkMarkAttendance(req, res) {
-    const transaction = await sequelize.transaction();
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
     try {
       const { attendanceList } = req.body;
 
       if (!Array.isArray(attendanceList) || attendanceList.length === 0) {
-        await transaction.rollback();
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({
           success: false,
           message: 'Invalid attendance list'
@@ -606,17 +608,13 @@ class AttendanceController {
 
         // Check for existing attendance
         const existing = await Attendance.findOne({
-          where: {
-            user_id,
-            meal_type,
-            scan_time: {
-              [Op.between]: [
-                moment(date).startOf('day').toDate(),
-                moment(date).endOf('day').toDate()
-              ]
-            }
+          user_id,
+          meal_type,
+          scan_time: {
+            $gte: moment(date).startOf('day').toDate(),
+            $lte: moment(date).endOf('day').toDate()
           }
-        });
+        }).session(session);
 
         if (existing) {
           results.push({
@@ -628,24 +626,25 @@ class AttendanceController {
           continue;
         }
 
-        const attendance = await Attendance.create({
+        const attendance = await Attendance.create([{
           user_id,
           subscription_id: null,
           meal_type,
           scan_time: moment(date).toDate(),
           marked_by: req.user.id,
           verification_method: 'manual'
-        }, { transaction });
+        }], { session });
 
         results.push({
           user_id,
           meal_type,
           status: 'success',
-          attendance_id: attendance.attendance_id
+          attendance_id: attendance[0].attendance_id
         });
       }
 
-      await transaction.commit();
+      await session.commitTransaction();
+      session.endSession();
 
       res.json({
         success: true,
@@ -653,7 +652,8 @@ class AttendanceController {
         data: results
       });
     } catch (error) {
-      await transaction.rollback();
+      await session.abortTransaction();
+      session.endSession();
       logger.error('Error in bulk attendance marking:', error);
       res.status(500).json({
         success: false,
@@ -670,27 +670,43 @@ class AttendanceController {
       const startDate = start_date ? moment(start_date) : moment().subtract(30, 'days');
       const endDate = end_date ? moment(end_date) : moment();
 
-      const attendance = await Attendance.findAll({
-        where: {
-          scan_time: {
-            [Op.between]: [startDate.toDate(), endDate.toDate()]
+      const attendance = await Attendance.aggregate([
+        {
+          $match: {
+            scan_time: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate()
+            }
           }
         },
-        attributes: [
-          'meal_type',
-          [sequelize.fn('COUNT', '*'), 'count'],
-          [sequelize.fn('DATE', sequelize.col('scan_time')), 'date']
-        ],
-        group: ['meal_type', sequelize.fn('DATE', sequelize.col('scan_time'))],
-        order: [[sequelize.fn('DATE', sequelize.col('scan_time')), 'ASC']]
-      });
+        {
+          $group: {
+            _id: {
+              meal_type: '$meal_type',
+              date: { $dateToString: { format: '%Y-%m-%d', date: '$scan_time' } }
+            },
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $sort: { '_id.date': 1 }
+        }
+      ]);
 
       // Calculate averages
       const totalDays = endDate.diff(startDate, 'days') + 1;
       const mealCounts = { breakfast: 0, lunch: 0, dinner: 0 };
 
-      attendance.forEach(record => {
-        mealCounts[record.meal_type] += parseInt(record.dataValues.count);
+      const formattedAttendance = attendance.map(record => {
+        const mealType = record._id.meal_type;
+        const count = record.count;
+        mealCounts[mealType] = (mealCounts[mealType] || 0) + count;
+
+        return {
+          meal_type: mealType,
+          count: count,
+          date: record._id.date
+        };
       });
 
       const analytics = {
@@ -705,7 +721,7 @@ class AttendanceController {
           lunch: (mealCounts.lunch / totalDays).toFixed(2),
           dinner: (mealCounts.dinner / totalDays).toFixed(2)
         },
-        daily: attendance
+        daily: formattedAttendance
       };
 
       res.json({
@@ -730,15 +746,13 @@ class AttendanceController {
       const startDate = start_date ? moment(start_date) : moment().subtract(30, 'days');
       const endDate = end_date ? moment(end_date) : moment();
 
-      const attendance = await Attendance.findAll({
-        where: {
-          user_id: userId,
-          scan_time: {
-            [Op.between]: [startDate.toDate(), endDate.toDate()]
-          }
-        },
-        order: [['scan_time', 'DESC']]
-      });
+      const attendance = await Attendance.find({
+        user_id: userId,
+        scan_time: {
+          $gte: startDate.toDate(),
+          $lte: endDate.toDate()
+        }
+      }).sort({ scan_time: -1 });
 
       const summary = {
         breakfast: attendance.filter(a => a.meal_type === 'breakfast').length,
@@ -747,9 +761,7 @@ class AttendanceController {
         total: attendance.length
       };
 
-      const user = await User.findByPk(userId, {
-        attributes: ['user_id', 'full_name', 'email']
-      });
+      const user = await User.findById(userId, 'user_id full_name email');
 
       res.json({
         success: true,
@@ -780,25 +792,33 @@ class AttendanceController {
       const startDate = start_date ? moment(start_date) : moment().startOf('month');
       const endDate = end_date ? moment(end_date) : moment().endOf('month');
 
-      const attendance = await Attendance.findAll({
-        attributes: [
-          'meal_type',
-          [sequelize.fn('COUNT', '*'), 'count'],
-          [sequelize.fn('DATE', sequelize.col('scan_time')), 'date']
-        ],
-        where: {
-          scan_time: {
-            [Op.between]: [startDate.toDate(), endDate.toDate()]
+      const attendance = await Attendance.aggregate([
+        {
+          $match: {
+            scan_time: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate()
+            }
           }
         },
-        group: ['meal_type', sequelize.fn('DATE', sequelize.col('scan_time'))],
-        order: [[sequelize.fn('DATE', sequelize.col('scan_time')), 'ASC']]
-      });
+        {
+          $group: {
+            _id: {
+              meal_type: '$meal_type',
+              date: { $dateToString: { format: '%Y-%m-%d', date: '$scan_time' } }
+            },
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $sort: { '_id.date': 1 }
+        }
+      ]);
 
       const mealwise = {};
-      
+
       attendance.forEach(record => {
-        const date = record.dataValues.date;
+        const date = record._id.date;
         if (!mealwise[date]) {
           mealwise[date] = {
             breakfast: 0,
@@ -806,7 +826,7 @@ class AttendanceController {
             dinner: 0
           };
         }
-        mealwise[date][record.meal_type] = parseInt(record.dataValues.count);
+        mealwise[date][record._id.meal_type] = record.count;
       });
 
       res.json({
@@ -852,23 +872,28 @@ class AttendanceController {
           groupInterval = 'day';
       }
 
-      const attendance = await Attendance.findAll({
-        attributes: [
-          [sequelize.fn('DATE', sequelize.col('scan_time')), 'date'],
-          [sequelize.fn('COUNT', '*'), 'count']
-        ],
-        where: {
-          scan_time: {
-            [Op.gte]: startDate.toDate()
+      const attendance = await Attendance.aggregate([
+        {
+          $match: {
+            scan_time: {
+              $gte: startDate.toDate()
+            }
           }
         },
-        group: [sequelize.fn('DATE', sequelize.col('scan_time'))],
-        order: [[sequelize.fn('DATE', sequelize.col('scan_time')), 'ASC']]
-      });
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$scan_time' } },
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $sort: { _id: 1 }
+        }
+      ]);
 
       const trends = attendance.map(record => ({
-        date: record.dataValues.date,
-        count: parseInt(record.dataValues.count)
+        date: record._id,
+        count: record.count
       }));
 
       res.json({
@@ -894,28 +919,28 @@ class AttendanceController {
       const today = moment().startOf('day');
 
       // Get active users
-      const activeUsers = await User.findAll({
-        where: { status: 'active' },
-        include: [{
-          model: Subscription,
-          as: 'subscriptions',
-          where: {
+      const activeUsers = await User.find({ status: 'active' })
+        .populate({
+          path: 'subscriptions',
+          match: {
             status: 'active',
-            end_date: { [Op.gte]: today.toDate() }
-          },
-          required: true
-        }]
-      });
+            end_date: { $gte: today.toDate() }
+          }
+        });
+
+      // Filter users who have active subscriptions
+      const usersWithActiveSubscriptions = activeUsers.filter(
+        user => user.subscriptions && user.subscriptions.length > 0
+      );
 
       const alerts = [];
 
-      for (const user of activeUsers) {
-        const attendance = await Attendance.findAll({
-          where: {
-            user_id: user.user_id,
-            scan_time: {
-              [Op.between]: [today.toDate(), moment().endOf('day').toDate()]
-            }
+      for (const user of usersWithActiveSubscriptions) {
+        const attendance = await Attendance.find({
+          user_id: user.user_id,
+          scan_time: {
+            $gte: today.toDate(),
+            $lte: moment().endOf('day').toDate()
           }
         });
 

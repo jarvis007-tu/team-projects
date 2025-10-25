@@ -1,10 +1,8 @@
-const { Op } = require('sequelize');
 const moment = require('moment');
 const User = require('../models/User');
 const Subscription = require('../models/Subscription');
 const Attendance = require('../models/Attendance');
 const logger = require('../utils/logger');
-const { sequelize } = require('../config/database');
 
 // Additional report controller methods
 const reportExtensions = {
@@ -15,20 +13,36 @@ const reportExtensions = {
       const startDate = start_date ? moment(start_date) : moment().startOf('month');
       const endDate = end_date ? moment(end_date) : moment().endOf('month');
 
-      const mealConsumption = await Attendance.findAll({
-        attributes: [
-          'meal_type',
-          [sequelize.fn('COUNT', '*'), 'count'],
-          [sequelize.fn('DATE', sequelize.col('scan_time')), 'date']
-        ],
-        where: {
-          scan_time: {
-            [Op.between]: [startDate.toDate(), endDate.toDate()]
+      const mealConsumption = await Attendance.aggregate([
+        {
+          $match: {
+            scan_time: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate()
+            }
           }
         },
-        group: ['meal_type', sequelize.fn('DATE', sequelize.col('scan_time'))],
-        order: [[sequelize.fn('DATE', sequelize.col('scan_time')), 'ASC']]
-      });
+        {
+          $group: {
+            _id: {
+              meal_type: '$meal_type',
+              date: { $dateToString: { format: "%Y-%m-%d", date: "$scan_time" } }
+            },
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            meal_type: '$_id.meal_type',
+            date: '$_id.date',
+            count: 1
+          }
+        },
+        {
+          $sort: { date: 1 }
+        }
+      ]);
 
       res.json({
         success: true,
@@ -56,23 +70,44 @@ const reportExtensions = {
       const startDate = start_date ? moment(start_date) : moment().startOf('month');
       const endDate = end_date ? moment(end_date) : moment().endOf('month');
 
-      const revenue = await Subscription.sum('amount', {
-        where: {
-          createdAt: {
-            [Op.between]: [startDate.toDate(), endDate.toDate()]
-          },
-          payment_status: 'paid'
+      const revenueResult = await Subscription.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate()
+            },
+            payment_status: 'paid'
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' }
+          }
         }
-      });
+      ]);
 
-      const pendingPayments = await Subscription.sum('amount', {
-        where: {
-          createdAt: {
-            [Op.between]: [startDate.toDate(), endDate.toDate()]
-          },
-          payment_status: 'pending'
+      const pendingResult = await Subscription.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate()
+            },
+            payment_status: 'pending'
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' }
+          }
         }
-      });
+      ]);
+
+      const revenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
+      const pendingPayments = pendingResult.length > 0 ? pendingResult[0].total : 0;
 
       res.json({
         success: true,
@@ -124,26 +159,43 @@ const reportExtensions = {
       const currentMonth = moment().startOf('month');
       const previousMonth = moment().subtract(1, 'month').startOf('month');
 
-      const [currentRevenue, previousRevenue] = await Promise.all([
-        Subscription.sum('amount', {
-          where: {
-            createdAt: {
-              [Op.gte]: currentMonth.toDate()
-            },
+      const currentRevenueResult = await Subscription.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: currentMonth.toDate() },
             payment_status: 'paid'
           }
-        }),
-        Subscription.sum('amount', {
-          where: {
-            createdAt: {
-              [Op.between]: [previousMonth.toDate(), currentMonth.toDate()]
-            },
-            payment_status: 'paid'
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' }
           }
-        })
+        }
       ]);
 
-      const growth = previousRevenue ? 
+      const previousRevenueResult = await Subscription.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: previousMonth.toDate(),
+              $lt: currentMonth.toDate()
+            },
+            payment_status: 'paid'
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' }
+          }
+        }
+      ]);
+
+      const currentRevenue = currentRevenueResult.length > 0 ? currentRevenueResult[0].total : 0;
+      const previousRevenue = previousRevenueResult.length > 0 ? previousRevenueResult[0].total : 0;
+
+      const growth = previousRevenue ?
         ((currentRevenue - previousRevenue) / previousRevenue * 100).toFixed(2) : 0;
 
       res.json({
@@ -190,32 +242,56 @@ const reportExtensions = {
       }
 
       let data;
-      
+
       if (metric === 'revenue') {
-        data = await Subscription.findAll({
-          attributes: [
-            [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
-            [sequelize.fn('SUM', sequelize.col('amount')), 'value']
-          ],
-          where: {
-            createdAt: { [Op.gte]: startDate.toDate() },
-            payment_status: 'paid'
+        data = await Subscription.aggregate([
+          {
+            $match: {
+              createdAt: { $gte: startDate.toDate() },
+              payment_status: 'paid'
+            }
           },
-          group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
-          order: [[sequelize.fn('DATE', sequelize.col('createdAt')), 'ASC']]
-        });
+          {
+            $group: {
+              _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+              value: { $sum: '$amount' }
+            }
+          },
+          {
+            $project: {
+              _id: 0,
+              date: '$_id',
+              value: 1
+            }
+          },
+          {
+            $sort: { date: 1 }
+          }
+        ]);
       } else if (metric === 'attendance') {
-        data = await Attendance.findAll({
-          attributes: [
-            [sequelize.fn('DATE', sequelize.col('scan_time')), 'date'],
-            [sequelize.fn('COUNT', '*'), 'value']
-          ],
-          where: {
-            scan_time: { [Op.gte]: startDate.toDate() }
+        data = await Attendance.aggregate([
+          {
+            $match: {
+              scan_time: { $gte: startDate.toDate() }
+            }
           },
-          group: [sequelize.fn('DATE', sequelize.col('scan_time'))],
-          order: [[sequelize.fn('DATE', sequelize.col('scan_time')), 'ASC']]
-        });
+          {
+            $group: {
+              _id: { $dateToString: { format: "%Y-%m-%d", date: "$scan_time" } },
+              value: { $sum: 1 }
+            }
+          },
+          {
+            $project: {
+              _id: 0,
+              date: '$_id',
+              value: 1
+            }
+          },
+          {
+            $sort: { date: 1 }
+          }
+        ]);
       }
 
       res.json({
@@ -240,7 +316,7 @@ const reportExtensions = {
   async getCustomReport(req, res) {
     try {
       const { config } = req.body;
-      
+
       res.json({
         success: true,
         data: {
@@ -390,7 +466,7 @@ const reportExtensions = {
 
       // Generate CSV header based on report type
       let csv = '';
-      
+
       if (reportType === 'attendance') {
         csv = 'Date,User,Email,Meal Type,Time\n';
         csv += 'Sample data for attendance report';

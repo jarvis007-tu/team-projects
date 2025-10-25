@@ -1,5 +1,4 @@
 const bcrypt = require('bcryptjs');
-const { Op } = require('sequelize');
 const User = require('../models/User');
 const Subscription = require('../models/Subscription');
 const logger = require('../utils/logger');
@@ -11,33 +10,34 @@ class UserController {
   async getAllUsers(req, res) {
     try {
       const { page = 1, limit = 10, search, role, status } = req.query;
-      const offset = (page - 1) * limit;
+      const skip = (page - 1) * limit;
 
-      const whereConditions = {};
-      
+      const queryConditions = {};
+
       if (search) {
-        whereConditions[Op.or] = [
-          { full_name: { [Op.like]: `%${search}%` } },
-          { email: { [Op.like]: `%${search}%` } },
-          { phone: { [Op.like]: `%${search}%` } }
+        queryConditions.$or = [
+          { full_name: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+          { phone: { $regex: search, $options: 'i' } }
         ];
       }
 
-      if (role) whereConditions.role = role;
-      if (status) whereConditions.status = status;
+      if (role) queryConditions.role = role;
+      if (status) queryConditions.status = status;
 
-      const { count, rows } = await User.findAndCountAll({
-        where: whereConditions,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        attributes: { exclude: ['password'] },
-        order: [['createdAt', 'DESC']]
-      });
+      const [users, count] = await Promise.all([
+        User.find(queryConditions)
+          .select('-password')
+          .limit(parseInt(limit))
+          .skip(skip)
+          .sort({ createdAt: -1 }),
+        User.countDocuments(queryConditions)
+      ]);
 
       res.json({
         success: true,
         data: {
-          users: rows,
+          users,
           pagination: {
             total: count,
             page: parseInt(page),
@@ -58,16 +58,13 @@ class UserController {
   async getUser(req, res) {
     try {
       const { id } = req.params;
-      
-      const user = await User.findByPk(id, {
-        attributes: { exclude: ['password'] },
-        include: [{
-          model: Subscription,
-          as: 'subscriptions',
-          where: { status: 'active' },
-          required: false
-        }]
-      });
+
+      const user = await User.findById(id)
+        .select('-password')
+        .populate({
+          path: 'subscriptions',
+          match: { status: 'active' }
+        });
 
       if (!user) {
         return res.status(404).json({
@@ -96,9 +93,7 @@ class UserController {
 
       // Check if user already exists
       const existingUser = await User.findOne({
-        where: {
-          [Op.or]: [{ email }, { phone }]
-        }
+        $or: [{ email }, { phone }]
       });
 
       if (existingUser) {
@@ -120,7 +115,7 @@ class UserController {
         status: 'active'
       });
 
-      const userResponse = user.toJSON();
+      const userResponse = user.toObject();
       delete userResponse.password;
 
       res.status(201).json({
@@ -145,10 +140,14 @@ class UserController {
 
       // Remove sensitive fields
       delete updates.password;
-      delete updates.user_id;
+      delete updates._id;
 
-      const user = await User.findByPk(id);
-      
+      const user = await User.findByIdAndUpdate(
+        id,
+        updates,
+        { new: true, runValidators: true }
+      ).select('-password');
+
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -156,15 +155,10 @@ class UserController {
         });
       }
 
-      await user.update(updates);
-
-      const userResponse = user.toJSON();
-      delete userResponse.password;
-
       res.json({
         success: true,
         message: 'User updated successfully',
-        data: userResponse
+        data: user
       });
     } catch (error) {
       logger.error('Error updating user:', error);
@@ -180,8 +174,8 @@ class UserController {
     try {
       const { id } = req.params;
 
-      const user = await User.findByPk(id);
-      
+      const user = await User.findById(id);
+
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -189,7 +183,7 @@ class UserController {
         });
       }
 
-      await user.destroy(); // Soft delete due to paranoid: true
+      await user.softDelete(); // Soft delete using plugin
 
       res.json({
         success: true,
@@ -231,9 +225,7 @@ class UserController {
 
           // Check if user exists
           const existingUser = await User.findOne({
-            where: {
-              [Op.or]: [{ email }, { phone }]
-            }
+            $or: [{ email }, { phone }]
           });
 
           if (existingUser) {
@@ -286,7 +278,7 @@ class UserController {
       const userId = req.user.id;
       const { full_name, phone } = req.body;
 
-      const user = await User.findByPk(userId);
+      const user = await User.findById(userId);
 
       if (!user) {
         return res.status(404).json({
@@ -298,7 +290,8 @@ class UserController {
       // Check if phone is being changed and is unique
       if (phone && phone !== user.phone) {
         const existingPhone = await User.findOne({
-          where: { phone, user_id: { [Op.ne]: userId } }
+          phone,
+          _id: { $ne: userId }
         });
 
         if (existingPhone) {
@@ -309,9 +302,11 @@ class UserController {
         }
       }
 
-      await user.update({ full_name, phone });
+      user.full_name = full_name;
+      user.phone = phone;
+      await user.save();
 
-      const userResponse = user.toJSON();
+      const userResponse = user.toObject();
       delete userResponse.password;
 
       res.json({
@@ -334,7 +329,7 @@ class UserController {
       const userId = req.user.id;
       const { currentPassword, newPassword } = req.body;
 
-      const user = await User.findByPk(userId);
+      const user = await User.findById(userId).select('+password');
 
       if (!user) {
         return res.status(404).json({
@@ -345,7 +340,7 @@ class UserController {
 
       // Verify current password
       const isValidPassword = await bcrypt.compare(currentPassword, user.password);
-      
+
       if (!isValidPassword) {
         return res.status(400).json({
           success: false,
@@ -355,7 +350,8 @@ class UserController {
 
       // Hash new password
       const hashedPassword = await bcrypt.hash(newPassword, 10);
-      await user.update({ password: hashedPassword });
+      user.password = hashedPassword;
+      await user.save();
 
       res.json({
         success: true,
@@ -382,7 +378,7 @@ class UserController {
         });
       }
 
-      const user = await User.findByPk(userId);
+      const user = await User.findById(userId);
 
       if (!user) {
         return res.status(404).json({
@@ -394,7 +390,8 @@ class UserController {
       // Upload to S3 or local storage
       const imageUrl = await uploadToS3(req.file, 'profile-images');
 
-      await user.update({ profile_image: imageUrl });
+      user.profile_image = imageUrl;
+      await user.save();
 
       res.json({
         success: true,

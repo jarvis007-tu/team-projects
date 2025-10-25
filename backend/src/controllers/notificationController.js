@@ -1,5 +1,3 @@
-const { Op, Sequelize } = require('sequelize');
-const { sequelize } = require('../config/database');
 const moment = require('moment');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
@@ -11,28 +9,25 @@ class NotificationController {
   async getAllNotifications(req, res) {
     try {
       const { page = 1, limit = 10, type, priority } = req.query;
-      const offset = (page - 1) * limit;
+      const skip = (page - 1) * limit;
 
-      const whereConditions = {};
-      if (type) whereConditions.type = type;
-      if (priority) whereConditions.priority = priority;
+      const queryConditions = {};
+      if (type) queryConditions.type = type;
+      if (priority) queryConditions.priority = priority;
 
-      const { count, rows } = await Notification.findAndCountAll({
-        where: whereConditions,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'full_name', 'email']
-        }],
-        order: [['created_at', 'DESC']]
-      });
+      const [notifications, count] = await Promise.all([
+        Notification.find(queryConditions)
+          .limit(parseInt(limit))
+          .skip(skip)
+          .populate('user_id', 'full_name email')
+          .sort({ created_at: -1 }),
+        Notification.countDocuments(queryConditions)
+      ]);
 
       res.json({
         success: true,
         data: {
-          notifications: rows,
+          notifications,
           pagination: {
             total: count,
             page: parseInt(page),
@@ -55,44 +50,45 @@ class NotificationController {
       logger.debug('User object:', req.user);
       const userId = req.user.user_id;
       const { page = 1, limit = 10, is_read } = req.query;
-      const offset = (page - 1) * limit;
+      const skip = (page - 1) * limit;
 
-      const whereConditions = {
-        [Op.or]: [
+      const queryConditions = {
+        $or: [
           { user_id: userId },
           { user_id: null } // Broadcast notifications
         ]
       };
 
       if (is_read !== undefined) {
-        whereConditions.is_read = is_read === 'true';
+        queryConditions.is_read = is_read === 'true';
       }
 
-      const { count, rows } = await Notification.findAndCountAll({
-        where: whereConditions,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        order: [['createdAt', 'DESC']]
+      const [notifications, count] = await Promise.all([
+        Notification.find(queryConditions)
+          .limit(parseInt(limit))
+          .skip(skip)
+          .sort({ createdAt: -1 }),
+        Notification.countDocuments(queryConditions)
+      ]);
+
+      const unreadCount = await Notification.countDocuments({
+        $or: [
+          { user_id: userId },
+          { user_id: null }
+        ],
+        is_read: false
       });
 
       res.json({
         success: true,
         data: {
-          notifications: rows,
+          notifications,
           pagination: {
             total: count,
             page: parseInt(page),
             pages: Math.ceil(count / limit)
           },
-          unreadCount: await Notification.count({
-            where: {
-              [Op.or]: [
-                { user_id: userId },
-                { user_id: null }
-              ],
-              is_read: false
-            }
-          })
+          unreadCount
         }
       });
     } catch (error) {
@@ -122,24 +118,22 @@ class NotificationController {
 
       // Send push notification if recipient has device token
       if (user_id) {
-        const user = await User.findByPk(user_id);
+        const user = await User.findById(user_id);
         if (user && user.device_token) {
           await sendPushNotification(user.device_token, {
             title,
             body: message,
             data: {
-              notification_id: notification.notification_id,
+              notification_id: notification._id.toString(),
               type
             }
           });
         }
       } else {
         // Broadcast to all users with device tokens
-        const users = await User.findAll({
-          where: {
-            device_token: { [Op.ne]: null },
-            status: 'active'
-          }
+        const users = await User.find({
+          device_token: { $ne: null },
+          status: 'active'
         });
 
         const deviceTokens = users.map(u => u.device_token);
@@ -148,7 +142,7 @@ class NotificationController {
             title,
             body: message,
             data: {
-              notification_id: notification.notification_id,
+              notification_id: notification._id.toString(),
               type
             }
           });
@@ -176,13 +170,11 @@ class NotificationController {
       const userId = req.user.user_id;
 
       const notification = await Notification.findOne({
-        where: {
-          notification_id: id,
-          [Op.or]: [
-            { user_id: userId },
-            { user_id: null }
-          ]
-        }
+        _id: id,
+        $or: [
+          { user_id: userId },
+          { user_id: null }
+        ]
       });
 
       if (!notification) {
@@ -192,10 +184,9 @@ class NotificationController {
         });
       }
 
-      await notification.update({
-        is_read: true,
-        read_at: new Date()
-      });
+      notification.is_read = true;
+      notification.read_at = new Date();
+      await notification.save();
 
       res.json({
         success: true,
@@ -215,19 +206,17 @@ class NotificationController {
     try {
       const userId = req.user.user_id;
 
-      await Notification.update(
+      await Notification.updateMany(
+        {
+          $or: [
+            { user_id: userId },
+            { user_id: null }
+          ],
+          is_read: false
+        },
         {
           is_read: true,
           read_at: new Date()
-        },
-        {
-          where: {
-            [Op.or]: [
-              { user_id: userId },
-              { user_id: null }
-            ],
-            is_read: false
-          }
         }
       );
 
@@ -249,7 +238,7 @@ class NotificationController {
     try {
       const { id } = req.params;
 
-      const notification = await Notification.findByPk(id);
+      const notification = await Notification.findByIdAndDelete(id);
 
       if (!notification) {
         return res.status(404).json({
@@ -257,8 +246,6 @@ class NotificationController {
           message: 'Notification not found'
         });
       }
-
-      await notification.destroy();
 
       res.json({
         success: true,
@@ -282,36 +269,32 @@ class NotificationController {
       let recipients = [];
 
       if (recipient_criteria) {
-        const whereConditions = {};
-        
+        const queryConditions = {};
+
         if (recipient_criteria.role) {
-          whereConditions.role = recipient_criteria.role;
-        }
-        
-        if (recipient_criteria.has_active_subscription) {
-          // Get users with active subscriptions
-          const activeSubscriptionUsers = await sequelize.query(
-            `SELECT DISTINCT user_id FROM subscriptions 
-             WHERE status = 'active' 
-             AND start_date <= CURDATE() 
-             AND end_date >= CURDATE()`,
-            { type: Sequelize.QueryTypes.SELECT }
-          );
-          
-          whereConditions.user_id = {
-            [Op.in]: activeSubscriptionUsers.map(u => u.user_id)
-          };
+          queryConditions.role = recipient_criteria.role;
         }
 
-        recipients = await User.findAll({
-          where: whereConditions,
-          attributes: ['user_id', 'device_token']
-        });
+        if (recipient_criteria.has_active_subscription) {
+          // Get users with active subscriptions
+          const Subscription = require('../models/Subscription');
+          const today = moment().format('YYYY-MM-DD');
+
+          const activeSubscriptions = await Subscription.find({
+            status: 'active',
+            start_date: { $lte: today },
+            end_date: { $gte: today }
+          }).distinct('user_id');
+
+          queryConditions._id = { $in: activeSubscriptions };
+        }
+
+        recipients = await User.find(queryConditions).select('_id device_token');
       }
 
       // Create notifications
       const notifications = [];
-      
+
       if (recipients.length > 0) {
         // Create individual notifications
         for (const recipient of recipients) {
@@ -319,11 +302,9 @@ class NotificationController {
             title,
             message,
             type,
-            user_id: recipient.user_id,
+            user_id: recipient._id,
             priority,
-            created_by: createdBy,
-            created_at: new Date(),
-            updated_at: new Date()
+            created_by: createdBy
           });
         }
       } else {
@@ -334,12 +315,11 @@ class NotificationController {
           type,
           user_id: null,
           priority,
-          created_by: createdBy,
-          createdAt: new Date()
+          created_by: createdBy
         });
       }
 
-      await Notification.bulkCreate(notifications);
+      await Notification.insertMany(notifications);
 
       // Send push notifications
       const deviceTokens = recipients
@@ -371,22 +351,16 @@ class NotificationController {
   async getNotificationStats(req, res) {
     try {
       const [totalSent, totalRead, byType, byPriority] = await Promise.all([
-        Notification.count(),
-        Notification.count({ where: { is_read: true } }),
-        Notification.findAll({
-          attributes: [
-            'type',
-            [Sequelize.fn('COUNT', Sequelize.col('notification_id')), 'count']
-          ],
-          group: ['type']
-        }),
-        Notification.findAll({
-          attributes: [
-            'priority',
-            [Sequelize.fn('COUNT', Sequelize.col('notification_id')), 'count']
-          ],
-          group: ['priority']
-        })
+        Notification.countDocuments(),
+        Notification.countDocuments({ is_read: true }),
+        Notification.aggregate([
+          { $group: { _id: '$type', count: { $sum: 1 } } },
+          { $project: { type: '$_id', count: 1, _id: 0 } }
+        ]),
+        Notification.aggregate([
+          { $group: { _id: '$priority', count: { $sum: 1 } } },
+          { $project: { priority: '$_id', count: 1, _id: 0 } }
+        ])
       ]);
 
       res.json({

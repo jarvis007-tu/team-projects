@@ -1,39 +1,35 @@
-const { Op } = require('sequelize');
 const moment = require('moment');
 const User = require('../models/User');
 const Subscription = require('../models/Subscription');
 const logger = require('../utils/logger');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
 class SubscriptionController {
   // Get all subscriptions (Admin only)
   async getAllSubscriptions(req, res) {
     try {
       const { page = 1, limit = 10, status, plan_type, user_id } = req.query;
-      const offset = (page - 1) * limit;
+      const skip = (page - 1) * limit;
 
-      const whereConditions = {};
-      
-      if (status) whereConditions.status = status;
-      if (plan_type) whereConditions.plan_type = plan_type;
-      if (user_id) whereConditions.user_id = user_id;
+      const queryConditions = {};
 
-      const { count, rows } = await Subscription.findAndCountAll({
-        where: whereConditions,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'full_name', 'email', 'phone']
-        }],
-        order: [['createdAt', 'DESC']]
-      });
+      if (status) queryConditions.status = status;
+      if (plan_type) queryConditions.plan_type = plan_type;
+      if (user_id) queryConditions.user_id = user_id;
+
+      const [subscriptions, count] = await Promise.all([
+        Subscription.find(queryConditions)
+          .limit(parseInt(limit))
+          .skip(skip)
+          .populate('user_id', 'full_name email phone')
+          .sort({ createdAt: -1 }),
+        Subscription.countDocuments(queryConditions)
+      ]);
 
       res.json({
         success: true,
         data: {
-          subscriptions: rows,
+          subscriptions,
           pagination: {
             total: count,
             page: parseInt(page),
@@ -55,10 +51,8 @@ class SubscriptionController {
     try {
       const userId = req.user.role === 'admin' ? req.params.userId : req.user.id;
 
-      const subscriptions = await Subscription.findAll({
-        where: { user_id: userId },
-        order: [['createdAt', 'DESC']]
-      });
+      const subscriptions = await Subscription.find({ user_id: userId })
+        .sort({ createdAt: -1 });
 
       res.json({
         success: true,
@@ -77,14 +71,13 @@ class SubscriptionController {
   async getActiveSubscription(req, res) {
     try {
       const userId = req.user.id;
+      const today = moment().format('YYYY-MM-DD');
 
       const subscription = await Subscription.findOne({
-        where: {
-          user_id: userId,
-          status: 'active',
-          start_date: { [Op.lte]: moment().format('YYYY-MM-DD') },
-          end_date: { [Op.gte]: moment().format('YYYY-MM-DD') }
-        }
+        user_id: userId,
+        status: 'active',
+        start_date: { $lte: today },
+        end_date: { $gte: today }
       });
 
       if (!subscription) {
@@ -110,15 +103,17 @@ class SubscriptionController {
 
   // Create subscription
   async createSubscription(req, res) {
-    const transaction = await sequelize.transaction();
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
     try {
       const { user_id, plan_type, start_date, payment_id } = req.body;
 
       // Check if user exists
-      const user = await User.findByPk(user_id);
+      const user = await User.findById(user_id);
       if (!user) {
-        await transaction.rollback();
+        await session.abortTransaction();
+        session.endSession();
         return res.status(404).json({
           success: false,
           message: 'User not found'
@@ -126,16 +121,16 @@ class SubscriptionController {
       }
 
       // Check for existing active subscription
+      const today = moment().format('YYYY-MM-DD');
       const existingSubscription = await Subscription.findOne({
-        where: {
-          user_id,
-          status: 'active',
-          end_date: { [Op.gte]: moment().format('YYYY-MM-DD') }
-        }
+        user_id,
+        status: 'active',
+        end_date: { $gte: today }
       });
 
       if (existingSubscription) {
-        await transaction.rollback();
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({
           success: false,
           message: 'User already has an active subscription'
@@ -165,14 +160,15 @@ class SubscriptionController {
           amount = 30000;
           break;
         default:
-          await transaction.rollback();
+          await session.abortTransaction();
+          session.endSession();
           return res.status(400).json({
             success: false,
             message: 'Invalid plan type'
           });
       }
 
-      const subscription = await Subscription.create({
+      const subscription = await Subscription.create([{
         user_id,
         plan_type,
         start_date: start_date || moment().format('YYYY-MM-DD'),
@@ -181,17 +177,19 @@ class SubscriptionController {
         payment_id,
         payment_status: payment_id ? 'paid' : 'pending',
         status: 'active'
-      }, { transaction });
+      }], { session });
 
-      await transaction.commit();
+      await session.commitTransaction();
+      session.endSession();
 
       res.status(201).json({
         success: true,
         message: 'Subscription created successfully',
-        data: subscription
+        data: subscription[0]
       });
     } catch (error) {
-      await transaction.rollback();
+      await session.abortTransaction();
+      session.endSession();
       logger.error('Error creating subscription:', error);
       res.status(500).json({
         success: false,
@@ -206,7 +204,11 @@ class SubscriptionController {
       const { id } = req.params;
       const updates = req.body;
 
-      const subscription = await Subscription.findByPk(id);
+      const subscription = await Subscription.findByIdAndUpdate(
+        id,
+        updates,
+        { new: true, runValidators: true }
+      );
 
       if (!subscription) {
         return res.status(404).json({
@@ -214,8 +216,6 @@ class SubscriptionController {
           message: 'Subscription not found'
         });
       }
-
-      await subscription.update(updates);
 
       res.json({
         success: true,
@@ -236,7 +236,11 @@ class SubscriptionController {
     try {
       const { id } = req.params;
 
-      const subscription = await Subscription.findByPk(id);
+      const subscription = await Subscription.findByIdAndUpdate(
+        id,
+        { status: 'cancelled' },
+        { new: true }
+      );
 
       if (!subscription) {
         return res.status(404).json({
@@ -244,8 +248,6 @@ class SubscriptionController {
           message: 'Subscription not found'
         });
       }
-
-      await subscription.update({ status: 'cancelled' });
 
       res.json({
         success: true,
@@ -262,16 +264,18 @@ class SubscriptionController {
 
   // Renew subscription
   async renewSubscription(req, res) {
-    const transaction = await sequelize.transaction();
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
     try {
       const { id } = req.params;
       const { plan_type, payment_id } = req.body;
 
-      const oldSubscription = await Subscription.findByPk(id);
+      const oldSubscription = await Subscription.findById(id);
 
       if (!oldSubscription) {
-        await transaction.rollback();
+        await session.abortTransaction();
+        session.endSession();
         return res.status(404).json({
           success: false,
           message: 'Subscription not found'
@@ -302,7 +306,7 @@ class SubscriptionController {
           break;
       }
 
-      const newSubscription = await Subscription.create({
+      const newSubscription = await Subscription.create([{
         user_id: oldSubscription.user_id,
         plan_type: plan_type || oldSubscription.plan_type,
         start_date: startDate.format('YYYY-MM-DD'),
@@ -311,17 +315,19 @@ class SubscriptionController {
         payment_id,
         payment_status: payment_id ? 'paid' : 'pending',
         status: 'active'
-      }, { transaction });
+      }], { session });
 
-      await transaction.commit();
+      await session.commitTransaction();
+      session.endSession();
 
       res.json({
         success: true,
         message: 'Subscription renewed successfully',
-        data: newSubscription
+        data: newSubscription[0]
       });
     } catch (error) {
-      await transaction.rollback();
+      await session.abortTransaction();
+      session.endSession();
       logger.error('Error renewing subscription:', error);
       res.status(500).json({
         success: false,
@@ -336,42 +342,32 @@ class SubscriptionController {
       const today = moment().format('YYYY-MM-DD');
 
       const [activeCount, expiredCount, totalRevenue] = await Promise.all([
-        Subscription.count({
-          where: {
-            status: 'active',
-            end_date: { [Op.gte]: today }
-          }
+        Subscription.countDocuments({
+          status: 'active',
+          end_date: { $gte: today }
         }),
-        Subscription.count({
-          where: {
-            status: { [Op.in]: ['expired', 'cancelled'] }
-          }
+        Subscription.countDocuments({
+          status: { $in: ['expired', 'cancelled'] }
         }),
-        Subscription.sum('amount', {
-          where: {
-            payment_status: 'paid'
-          }
-        })
+        Subscription.aggregate([
+          { $match: { payment_status: 'paid' } },
+          { $group: { _id: null, total: { $sum: '$amount' } } }
+        ])
       ]);
 
       // Plan distribution
-      const planDistribution = await Subscription.findAll({
-        attributes: [
-          'plan_type',
-          [sequelize.fn('COUNT', sequelize.col('subscription_id')), 'count']
-        ],
-        where: {
-          status: 'active'
-        },
-        group: ['plan_type']
-      });
+      const planDistribution = await Subscription.aggregate([
+        { $match: { status: 'active' } },
+        { $group: { _id: '$plan_type', count: { $sum: 1 } } },
+        { $project: { plan_type: '$_id', count: 1, _id: 0 } }
+      ]);
 
       res.json({
         success: true,
         data: {
           activeSubscriptions: activeCount,
           expiredSubscriptions: expiredCount,
-          totalRevenue: totalRevenue || 0,
+          totalRevenue: totalRevenue.length > 0 ? totalRevenue[0].total : 0,
           planDistribution
         }
       });
@@ -389,19 +385,17 @@ class SubscriptionController {
     try {
       const today = moment().format('YYYY-MM-DD');
 
-      const result = await Subscription.update(
-        { status: 'expired' },
+      const result = await Subscription.updateMany(
         {
-          where: {
-            status: 'active',
-            end_date: { [Op.lt]: today }
-          }
-        }
+          status: 'active',
+          end_date: { $lt: today }
+        },
+        { status: 'expired' }
       );
 
       res.json({
         success: true,
-        message: `Updated ${result[0]} expired subscriptions`
+        message: `Updated ${result.modifiedCount} expired subscriptions`
       });
     } catch (error) {
       logger.error('Error updating expired subscriptions:', error);
@@ -417,13 +411,8 @@ class SubscriptionController {
     try {
       const { id } = req.params;
 
-      const subscription = await Subscription.findByPk(id, {
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'full_name', 'email', 'phone']
-        }]
-      });
+      const subscription = await Subscription.findById(id)
+        .populate('user_id', 'full_name email phone');
 
       if (!subscription) {
         return res.status(404).json({

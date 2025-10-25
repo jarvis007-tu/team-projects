@@ -1,5 +1,4 @@
 const { User, Subscription } = require('../models');
-const { Op } = require('sequelize');
 const jwtManager = require('../utils/jwt');
 const { redisClient } = require('../config/redis-optional');
 const logger = require('../utils/logger');
@@ -19,9 +18,7 @@ class AuthController {
 
       // Check if user exists
       const existingUser = await User.findOne({
-        where: {
-          [Op.or]: [{ email }, { phone }]
-        }
+        $or: [{ email }, { phone }]
       });
 
       if (existingUser) {
@@ -43,16 +40,16 @@ class AuthController {
 
       // Generate tokens
       const tokens = jwtManager.generateTokens({
-        userId: user.user_id,
+        userId: user._id.toString(),
         email: user.email,
         role: user.role
       });
 
       // Store refresh token
-      await jwtManager.storeRefreshToken(user.user_id, tokens.refreshToken);
+      await jwtManager.storeRefreshToken(user._id.toString(), tokens.refreshToken);
 
       // Log registration
-      logger.info(`New user registered: ${user.user_id} - ${user.email}`);
+      logger.info(`New user registered: ${user._id} - ${user.email}`);
 
       res.status(201).json({
         success: true,
@@ -76,15 +73,18 @@ class AuthController {
         throw new AppError('Email/Phone and password are required', 400);
       }
 
-      // Find user
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            email ? { email } : {},
-            phone ? { phone } : {}
-          ].filter(obj => Object.keys(obj).length > 0)
-        }
-      });
+      // Build query for email or phone
+      const query = {};
+      if (email && phone) {
+        query.$or = [{ email }, { phone }];
+      } else if (email) {
+        query.email = email;
+      } else if (phone) {
+        query.phone = phone;
+      }
+
+      // Find user - need password for validation
+      const user = await User.findOne(query).select('+password');
 
       if (!user) {
         throw new AppError('Invalid credentials', 401);
@@ -98,7 +98,7 @@ class AuthController {
 
       // Validate password
       const isValidPassword = await user.validatePassword(password);
-      
+
       if (!isValidPassword) {
         await user.incrementLoginAttempts();
         throw new AppError('Invalid credentials', 401);
@@ -120,39 +120,34 @@ class AuthController {
 
       // Generate tokens
       const tokens = jwtManager.generateTokens({
-        userId: user.user_id,
+        userId: user._id.toString(),
         email: user.email,
         role: user.role
       });
 
       // Store refresh token
-      await jwtManager.storeRefreshToken(user.user_id, tokens.refreshToken);
+      await jwtManager.storeRefreshToken(user._id.toString(), tokens.refreshToken);
 
       // Get active subscription
+      const today = moment().format('YYYY-MM-DD');
       const activeSubscription = await Subscription.findOne({
-        where: {
-          user_id: user.user_id,
-          status: 'active',
-          start_date: {
-            [Op.lte]: moment().format('YYYY-MM-DD')
-          },
-          end_date: {
-            [Op.gte]: moment().format('YYYY-MM-DD')
-          }
-        }
+        user_id: user._id,
+        status: 'active',
+        start_date: { $lte: new Date(today) },
+        end_date: { $gte: new Date(today) }
       });
 
       // Cache user data (if Redis is available)
       try {
         if (redisClient && redisClient.isReady) {
-          await redisClient.set(`user:${user.user_id}`, JSON.stringify(user.toJSON()), 300);
+          await redisClient.set(`user:${user._id}`, JSON.stringify(user.toJSON()), { EX: 300 });
         }
       } catch (cacheError) {
         logger.debug('Redis cache failed during login:', cacheError.message);
       }
 
       // Log successful login
-      logger.info(`User login successful: ${user.user_id} - ${user.email}`);
+      logger.info(`User login successful: ${user._id} - ${user.email}`);
 
       res.json({
         success: true,
@@ -171,7 +166,7 @@ class AuthController {
   async refreshToken(req, res, next) {
     try {
       const { refreshToken } = req.body;
-      
+
       if (!refreshToken) {
         throw new AppError('Refresh token required', 400);
       }
@@ -191,20 +186,20 @@ class AuthController {
       }
 
       // Get user
-      const user = await User.findByPk(decoded.userId);
+      const user = await User.findById(decoded.userId);
       if (!user || user.status !== 'active') {
         throw new AppError('User not found or inactive', 401);
       }
 
       // Generate new tokens
       const tokens = jwtManager.generateTokens({
-        userId: user.user_id,
+        userId: user._id.toString(),
         email: user.email,
         role: user.role
       });
 
       // Store new refresh token
-      await jwtManager.storeRefreshToken(user.user_id, tokens.refreshToken);
+      await jwtManager.storeRefreshToken(user._id.toString(), tokens.refreshToken);
 
       res.json({
         success: true,
@@ -260,7 +255,10 @@ class AuthController {
       }
 
       // Get user with password
-      const user = await User.findByPk(userId);
+      const user = await User.findById(userId).select('+password');
+      if (!user) {
+        throw new AppError('User not found', 404);
+      }
 
       // Validate current password
       const isValid = await user.validatePassword(currentPassword);
@@ -297,8 +295,8 @@ class AuthController {
         throw new AppError('Email is required', 400);
       }
 
-      const user = await User.findOne({ where: { email } });
-      
+      const user = await User.findOne({ email });
+
       if (!user) {
         // Don't reveal if user exists
         res.json({
@@ -317,8 +315,8 @@ class AuthController {
         if (redisClient && redisClient.isReady) {
           await redisClient.set(
             `password_reset:${resetToken}`,
-            JSON.stringify({ userId: user.user_id, email: user.email }),
-            3600
+            JSON.stringify({ userId: user._id.toString(), email: user.email }),
+            { EX: 3600 }
           );
         }
       } catch (redisError) {
@@ -333,7 +331,7 @@ class AuthController {
       } catch (emailError) {
         logger.error('Failed to send reset email:', emailError.message);
       }
-      
+
       logger.info(`Password reset requested for: ${user.email}`);
 
       res.json({
@@ -365,14 +363,14 @@ class AuthController {
       } catch (redisError) {
         logger.debug('Redis get failed for reset token:', redisError.message);
       }
-      
+
       if (!resetData) {
         throw new AppError('Invalid or expired reset token', 400);
       }
 
       // Get user
-      const user = await User.findByPk(resetData.userId);
-      
+      const user = await User.findById(resetData.userId);
+
       if (!user) {
         throw new AppError('User not found', 404);
       }
@@ -393,7 +391,7 @@ class AuthController {
       }
 
       // Remove all tokens for this user
-      await jwtManager.removeRefreshToken(user.user_id);
+      await jwtManager.removeRefreshToken(user._id.toString());
 
       logger.info(`Password reset successful for: ${user.email}`);
 
@@ -410,28 +408,27 @@ class AuthController {
     try {
       const userId = req.user.user_id;
 
-      // Get user with subscription
-      const user = await User.findByPk(userId, {
-        attributes: { exclude: ['password'] },
-        include: [{
-          model: Subscription,
-          as: 'subscriptions',
-          where: {
-            status: 'active',
-            start_date: {
-              [Op.lte]: moment().format('YYYY-MM-DD')
-            },
-            end_date: {
-              [Op.gte]: moment().format('YYYY-MM-DD')
-            }
-          },
-          required: false
-        }]
+      // Get user
+      const user = await User.findById(userId).select('-password');
+      if (!user) {
+        throw new AppError('User not found', 404);
+      }
+
+      // Get active subscriptions
+      const today = moment().format('YYYY-MM-DD');
+      const subscriptions = await Subscription.find({
+        user_id: userId,
+        status: 'active',
+        start_date: { $lte: new Date(today) },
+        end_date: { $gte: new Date(today) }
       });
 
       res.json({
         success: true,
-        data: user
+        data: {
+          ...user.toJSON(),
+          subscriptions
+        }
       });
     } catch (error) {
       next(error);
@@ -443,7 +440,10 @@ class AuthController {
       const userId = req.user.user_id;
       const { full_name, phone, preferences } = req.body;
 
-      const user = await User.findByPk(userId);
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new AppError('User not found', 404);
+      }
 
       // Update allowed fields
       if (full_name) user.full_name = full_name;
@@ -474,32 +474,27 @@ class AuthController {
   async getCurrentUser(req, res, next) {
     try {
       const userId = req.user.user_id;
-      
-      const user = await User.findByPk(userId, {
-        attributes: { exclude: ['password'] },
-        include: [{
-          model: Subscription,
-          as: 'subscriptions',
-          where: {
-            status: 'active',
-            start_date: {
-              [Op.lte]: moment().format('YYYY-MM-DD')
-            },
-            end_date: {
-              [Op.gte]: moment().format('YYYY-MM-DD')
-            }
-          },
-          required: false
-        }]
-      });
 
+      const user = await User.findById(userId).select('-password');
       if (!user) {
         throw new AppError('User not found', 404);
       }
 
+      // Get active subscriptions
+      const today = moment().format('YYYY-MM-DD');
+      const subscriptions = await Subscription.find({
+        user_id: userId,
+        status: 'active',
+        start_date: { $lte: new Date(today) },
+        end_date: { $gte: new Date(today) }
+      });
+
       res.json({
         success: true,
-        data: user
+        data: {
+          ...user.toJSON(),
+          subscriptions
+        }
       });
     } catch (error) {
       next(error);
@@ -515,7 +510,11 @@ class AuthController {
         throw new AppError('Device ID is required', 400);
       }
 
-      const user = await User.findByPk(userId);
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new AppError('User not found', 404);
+      }
+
       user.device_id = device_id;
       await user.save();
 

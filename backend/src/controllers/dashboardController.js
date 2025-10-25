@@ -1,5 +1,3 @@
-const { Op } = require('sequelize');
-const { sequelize } = require('../config/database');
 const { User, Subscription, Attendance, WeeklyMenu } = require('../models');
 const moment = require('moment');
 const logger = require('../utils/logger');
@@ -11,45 +9,48 @@ class DashboardController {
       const thisMonth = moment().startOf('month');
       
       // Get user statistics
-      const totalUsers = await User.count();
-      const activeUsers = await User.count({ where: { status: 'active' } });
-      
+      const totalUsers = await User.countDocuments();
+      const activeUsers = await User.countDocuments({ status: 'active' });
+
       // Get subscription statistics
-      const activeSubscriptions = await Subscription.count({
-        where: {
-          status: 'active',
-          end_date: { [Op.gte]: today.toDate() }
+      const activeSubscriptions = await Subscription.countDocuments({
+        status: 'active',
+        end_date: { $gte: today.toDate() }
+      });
+
+      const expiringSoon = await Subscription.countDocuments({
+        status: 'active',
+        end_date: {
+          $gte: today.toDate(),
+          $lte: moment().add(7, 'days').toDate()
         }
       });
-      
-      const expiringSoon = await Subscription.count({
-        where: {
-          status: 'active',
-          end_date: {
-            [Op.between]: [today.toDate(), moment().add(7, 'days').toDate()]
-          }
-        }
-      });
-      
+
       // Get today's attendance
-      const todayAttendance = await Attendance.count({
-        where: {
-          scan_time: {
-            [Op.between]: [today.toDate(), moment().endOf('day').toDate()]
-          }
+      const todayAttendance = await Attendance.countDocuments({
+        scan_time: {
+          $gte: today.toDate(),
+          $lte: moment().endOf('day').toDate()
         }
       });
-      
+
       // Calculate actual revenue from active subscriptions
-      const activeSubscriptionsWithAmount = await Subscription.findAll({
-        where: {
-          status: 'active',
-          end_date: { [Op.gte]: today.toDate() }
+      const revenueResult = await Subscription.aggregate([
+        {
+          $match: {
+            status: 'active',
+            end_date: { $gte: today.toDate() }
+          }
         },
-        attributes: [[sequelize.fn('SUM', sequelize.col('amount')), 'total']]
-      });
-      
-      const monthlyRevenue = activeSubscriptionsWithAmount[0]?.dataValues?.total || 0;
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' }
+          }
+        }
+      ]);
+
+      const monthlyRevenue = revenueResult[0]?.total || 0;
       
       res.json({
         success: true,
@@ -62,20 +63,17 @@ class DashboardController {
           subscriptions: {
             active: activeSubscriptions,
             expiringSoon: expiringSoon,
-            expired: await Subscription.count({
-              where: {
-                status: 'expired',
-                end_date: { [Op.lt]: today.toDate() }
-              }
+            expired: await Subscription.countDocuments({
+              status: 'expired',
+              end_date: { $lt: today.toDate() }
             })
           },
           attendance: {
             today: todayAttendance,
-            weekly: await Attendance.count({
-              where: {
-                scan_time: {
-                  [Op.between]: [moment().startOf('week').toDate(), moment().endOf('week').toDate()]
-                }
+            weekly: await Attendance.countDocuments({
+              scan_time: {
+                $gte: moment().startOf('week').toDate(),
+                $lte: moment().endOf('week').toDate()
               }
             })
           },
@@ -99,26 +97,16 @@ class DashboardController {
       const { limit = 10 } = req.query;
       
       // Get recent attendance logs
-      const recentAttendance = await Attendance.findAll({
-        limit: parseInt(limit),
-        order: [['scan_time', 'DESC']],
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['full_name', 'email']
-        }]
-      });
-      
+      const recentAttendance = await Attendance.find()
+        .limit(parseInt(limit))
+        .sort({ scan_time: -1 })
+        .populate('user_id', 'full_name email');
+
       // Get recent subscriptions
-      const recentSubscriptions = await Subscription.findAll({
-        limit: parseInt(limit),
-        order: [['createdAt', 'DESC']],
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['full_name', 'email']
-        }]
-      });
+      const recentSubscriptions = await Subscription.find()
+        .limit(parseInt(limit))
+        .sort({ createdAt: -1 })
+        .populate('user_id', 'full_name email');
       
       // Combine and sort activities
       const activities = [];
@@ -126,18 +114,18 @@ class DashboardController {
       recentAttendance.forEach(log => {
         activities.push({
           type: 'attendance',
-          message: `${log.user?.full_name || 'User'} scanned for ${log.meal_type}`,
+          message: `${log.user_id?.full_name || 'User'} scanned for ${log.meal_type}`,
           timestamp: log.scan_time,
-          user: log.user
+          user: log.user_id
         });
       });
-      
+
       recentSubscriptions.forEach(sub => {
         activities.push({
           type: 'subscription',
-          message: `${sub.user?.full_name || 'User'} ${sub.status === 'active' ? 'activated' : sub.status} subscription`,
+          message: `${sub.user_id?.full_name || 'User'} ${sub.status === 'active' ? 'activated' : sub.status} subscription`,
           timestamp: sub.createdAt,
-          user: sub.user
+          user: sub.user_id
         });
       });
       
@@ -180,20 +168,26 @@ class DashboardController {
           endDate = moment().endOf('week');
       }
       
-      // Get attendance data
-      const attendanceData = await Attendance.findAll({
-        where: {
-          scan_time: {
-            [Op.between]: [startDate.toDate(), endDate.toDate()]
+      // Get attendance data using MongoDB aggregation
+      const attendanceData = await Attendance.aggregate([
+        {
+          $match: {
+            scan_time: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate()
+            }
           }
         },
-        attributes: [
-          'meal_type',
-          [User.sequelize.fn('COUNT', '*'), 'count'],
-          [User.sequelize.fn('DATE', User.sequelize.col('scan_time')), 'date']
-        ],
-        group: ['meal_type', User.sequelize.fn('DATE', User.sequelize.col('scan_time'))]
-      });
+        {
+          $group: {
+            _id: {
+              meal_type: '$meal_type',
+              date: { $dateToString: { format: '%Y-%m-%d', date: '$scan_time' } }
+            },
+            count: { $sum: 1 }
+          }
+        }
+      ]);
       
       // Format data for charts
       const chartData = {};
@@ -212,9 +206,9 @@ class DashboardController {
       
       // Populate with actual data
       attendanceData.forEach(record => {
-        const dateStr = moment(record.dataValues.date).format('YYYY-MM-DD');
+        const dateStr = record._id.date;
         if (chartData[dateStr]) {
-          chartData[dateStr][record.meal_type] = parseInt(record.dataValues.count);
+          chartData[dateStr][record._id.meal_type] = record.count;
         }
       });
       
@@ -226,11 +220,11 @@ class DashboardController {
           endDate: endDate.format('YYYY-MM-DD'),
           chartData: Object.values(chartData),
           summary: {
-            total: attendanceData.reduce((sum, record) => sum + parseInt(record.dataValues.count), 0),
+            total: attendanceData.reduce((sum, record) => sum + record.count, 0),
             byMealType: mealTypes.reduce((acc, type) => {
               acc[type] = attendanceData
-                .filter(record => record.meal_type === type)
-                .reduce((sum, record) => sum + parseInt(record.dataValues.count), 0);
+                .filter(record => record._id.meal_type === type)
+                .reduce((sum, record) => sum + record.count, 0);
               return acc;
             }, {})
           }
@@ -249,18 +243,19 @@ class DashboardController {
     try {
       const now = moment();
       
-      // Get subscription statistics by plan
-      const planStats = await Subscription.findAll({
-        attributes: [
-          'plan_type',
-          [User.sequelize.fn('COUNT', '*'), 'count'],
-          [User.sequelize.fn('SUM', User.sequelize.col('amount')), 'revenue']
-        ],
-        where: {
-          status: 'active'
+      // Get subscription statistics by plan using aggregation
+      const planStats = await Subscription.aggregate([
+        {
+          $match: { status: 'active' }
         },
-        group: ['plan_type']
-      });
+        {
+          $group: {
+            _id: '$plan_type',
+            count: { $sum: 1 },
+            revenue: { $sum: '$amount' }
+          }
+        }
+      ]);
       
       // Get monthly growth
       const monthlyGrowth = [];
@@ -268,11 +263,10 @@ class DashboardController {
         const monthStart = moment().subtract(i, 'months').startOf('month');
         const monthEnd = moment().subtract(i, 'months').endOf('month');
         
-        const count = await Subscription.count({
-          where: {
-            createdAt: {
-              [Op.between]: [monthStart.toDate(), monthEnd.toDate()]
-            }
+        const count = await Subscription.countDocuments({
+          createdAt: {
+            $gte: monthStart.toDate(),
+            $lte: monthEnd.toDate()
           }
         });
         
@@ -283,21 +277,19 @@ class DashboardController {
       }
       
       // Get renewal rate
-      const totalExpired = await Subscription.count({
-        where: {
-          status: 'expired',
-          end_date: {
-            [Op.between]: [moment().subtract(30, 'days').toDate(), now.toDate()]
-          }
+      const totalExpired = await Subscription.countDocuments({
+        status: 'expired',
+        end_date: {
+          $gte: moment().subtract(30, 'days').toDate(),
+          $lte: now.toDate()
         }
       });
-      
-      const renewed = await Subscription.count({
-        where: {
-          status: 'active',
-          createdAt: {
-            [Op.between]: [moment().subtract(30, 'days').toDate(), now.toDate()]
-          }
+
+      const renewed = await Subscription.countDocuments({
+        status: 'active',
+        createdAt: {
+          $gte: moment().subtract(30, 'days').toDate(),
+          $lte: now.toDate()
         }
       });
       
@@ -310,11 +302,11 @@ class DashboardController {
           monthlyGrowth,
           renewalRate: parseFloat(renewalRate),
           summary: {
-            totalActive: await Subscription.count({ where: { status: 'active' } }),
-            totalRevenue: planStats.reduce((sum, plan) => sum + (parseFloat(plan.dataValues.revenue) || 0), 0),
-            averageSubscriptionValue: planStats.length > 0 
-              ? planStats.reduce((sum, plan) => sum + (parseFloat(plan.dataValues.revenue) || 0), 0) / 
-                planStats.reduce((sum, plan) => sum + parseInt(plan.dataValues.count), 0)
+            totalActive: await Subscription.countDocuments({ status: 'active' }),
+            totalRevenue: planStats.reduce((sum, plan) => sum + (plan.revenue || 0), 0),
+            averageSubscriptionValue: planStats.length > 0
+              ? planStats.reduce((sum, plan) => sum + (plan.revenue || 0), 0) /
+                planStats.reduce((sum, plan) => sum + plan.count, 0)
               : 0
           }
         }
@@ -333,10 +325,8 @@ class DashboardController {
       const today = moment().format('dddd').toLowerCase();
       
       const todayMenu = await WeeklyMenu.findOne({
-        where: {
-          day_of_week: today,
-          is_active: true
-        }
+        day: today,
+        is_active: true
       });
       
       if (!todayMenu) {
@@ -378,19 +368,14 @@ class DashboardController {
       const today = moment().startOf('day');
       const endOfToday = moment().endOf('day');
       
-      const attendance = await Attendance.findAll({
-        where: {
-          scan_time: {
-            [Op.between]: [today.toDate(), endOfToday.toDate()]
-          }
-        },
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'full_name', 'email']
-        }],
-        order: [['scan_time', 'DESC']]
-      });
+      const attendance = await Attendance.find({
+        scan_time: {
+          $gte: today.toDate(),
+          $lte: endOfToday.toDate()
+        }
+      })
+        .populate('user_id', 'full_name email')
+        .sort({ scan_time: -1 });
       
       const summary = {
         breakfast: attendance.filter(a => a.meal_type === 'breakfast').length,
@@ -422,18 +407,22 @@ class DashboardController {
       const startOfDay = targetDate.startOf('day');
       const endOfDay = targetDate.clone().endOf('day');
       
-      const attendance = await Attendance.findAll({
-        where: {
-          scan_time: {
-            [Op.between]: [startOfDay.toDate(), endOfDay.toDate()]
+      const attendance = await Attendance.aggregate([
+        {
+          $match: {
+            scan_time: {
+              $gte: startOfDay.toDate(),
+              $lte: endOfDay.toDate()
+            }
           }
         },
-        attributes: [
-          'meal_type',
-          [User.sequelize.fn('COUNT', '*'), 'count']
-        ],
-        group: ['meal_type']
-      });
+        {
+          $group: {
+            _id: '$meal_type',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
       
       const mealwise = {
         breakfast: 0,
@@ -442,7 +431,7 @@ class DashboardController {
       };
       
       attendance.forEach(record => {
-        mealwise[record.meal_type] = parseInt(record.dataValues.count);
+        mealwise[record._id] = record.count;
       });
       
       res.json({
@@ -468,20 +457,15 @@ class DashboardController {
       const today = moment().startOf('day');
       const expiryDate = moment().add(parseInt(days), 'days').endOf('day');
       
-      const subscriptions = await Subscription.findAll({
-        where: {
-          status: 'active',
-          end_date: {
-            [Op.between]: [today.toDate(), expiryDate.toDate()]
-          }
-        },
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'full_name', 'email', 'phone']
-        }],
-        order: [['end_date', 'ASC']]
-      });
+      const subscriptions = await Subscription.find({
+        status: 'active',
+        end_date: {
+          $gte: today.toDate(),
+          $lte: expiryDate.toDate()
+        }
+      })
+        .populate('user_id', 'full_name email phone')
+        .sort({ end_date: 1 });
       
       res.json({
         success: true,
@@ -532,22 +516,26 @@ class DashboardController {
           groupBy = 'day';
       }
       
-      const revenue = await Subscription.findAll({
-        attributes: [
-          [User.sequelize.fn('SUM', User.sequelize.col('amount')), 'total'],
-          [User.sequelize.fn('COUNT', '*'), 'count'],
-          [User.sequelize.fn('DATE', User.sequelize.col('createdAt')), 'date']
-        ],
-        where: {
-          createdAt: {
-            [Op.between]: [startDate.toDate(), endDate.toDate()]
-          },
-          payment_status: 'paid'
+      const revenue = await Subscription.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate()
+            },
+            payment_status: 'paid'
+          }
         },
-        group: [User.sequelize.fn('DATE', User.sequelize.col('createdAt'))]
-      });
-      
-      const totalRevenue = revenue.reduce((sum, r) => sum + parseFloat(r.dataValues.total || 0), 0);
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            total: { $sum: '$amount' },
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+
+      const totalRevenue = revenue.reduce((sum, r) => sum + (r.total || 0), 0);
       const averageRevenue = revenue.length > 0 ? totalRevenue / revenue.length : 0;
       
       res.json({
@@ -577,12 +565,11 @@ class DashboardController {
       const today = moment();
       
       // Check for expiring subscriptions
-      const expiringCount = await Subscription.count({
-        where: {
-          status: 'active',
-          end_date: {
-            [Op.between]: [today.toDate(), moment().add(3, 'days').toDate()]
-          }
+      const expiringCount = await Subscription.countDocuments({
+        status: 'active',
+        end_date: {
+          $gte: today.toDate(),
+          $lte: moment().add(3, 'days').toDate()
         }
       });
       
@@ -595,15 +582,14 @@ class DashboardController {
       }
       
       // Check for low attendance
-      const todayAttendance = await Attendance.count({
-        where: {
-          scan_time: {
-            [Op.between]: [today.startOf('day').toDate(), today.endOf('day').toDate()]
-          }
+      const todayAttendance = await Attendance.countDocuments({
+        scan_time: {
+          $gte: today.startOf('day').toDate(),
+          $lte: today.endOf('day').toDate()
         }
       });
-      
-      const activeUsers = await User.count({ where: { status: 'active' } });
+
+      const activeUsers = await User.countDocuments({ status: 'active' });
       const attendanceRate = activeUsers > 0 ? (todayAttendance / (activeUsers * 3)) * 100 : 0;
       
       if (attendanceRate < 50) {
@@ -615,11 +601,9 @@ class DashboardController {
       }
       
       // Check for pending payments
-      const pendingPayments = await Subscription.count({
-        where: {
-          payment_status: 'pending',
-          status: 'active'
-        }
+      const pendingPayments = await Subscription.countDocuments({
+        payment_status: 'pending',
+        status: 'active'
       });
       
       if (pendingPayments > 0) {
@@ -648,28 +632,37 @@ class DashboardController {
       const today = moment();
       const thisMonth = moment().startOf('month');
       
-      const [totalUsers, activeSubscriptions, todayAttendance, monthlyRevenue] = await Promise.all([
-        User.count({ where: { status: 'active' } }),
-        Subscription.count({
-          where: {
-            status: 'active',
-            end_date: { [Op.gte]: today.toDate() }
-          }
+      const [totalUsers, activeSubscriptions, todayAttendance] = await Promise.all([
+        User.countDocuments({ status: 'active' }),
+        Subscription.countDocuments({
+          status: 'active',
+          end_date: { $gte: today.toDate() }
         }),
-        Attendance.count({
-          where: {
-            scan_time: {
-              [Op.between]: [today.startOf('day').toDate(), today.endOf('day').toDate()]
-            }
-          }
-        }),
-        Subscription.sum('amount', {
-          where: {
-            createdAt: { [Op.gte]: thisMonth.toDate() },
-            payment_status: 'paid'
+        Attendance.countDocuments({
+          scan_time: {
+            $gte: today.startOf('day').toDate(),
+            $lte: today.endOf('day').toDate()
           }
         })
       ]);
+
+      // Get monthly revenue using aggregation
+      const revenueResult = await Subscription.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: thisMonth.toDate() },
+            payment_status: 'paid'
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' }
+          }
+        }
+      ]);
+
+      const monthlyRevenue = revenueResult[0]?.total || 0;
       
       res.json({
         success: true,

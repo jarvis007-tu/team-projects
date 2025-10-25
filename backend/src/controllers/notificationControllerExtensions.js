@@ -1,7 +1,6 @@
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const logger = require('../utils/logger');
-const { Op } = require('sequelize');
 const moment = require('moment');
 
 // Extension methods for notification controller
@@ -115,36 +114,32 @@ const notificationExtensions = {
   async getNotificationHistory(req, res) {
     try {
       const { page = 1, limit = 10, start_date, end_date } = req.query;
-      const offset = (page - 1) * limit;
+      const skip = (page - 1) * limit;
 
       const whereConditions = {};
-      
+
       if (start_date && end_date) {
         whereConditions.created_at = {
-          [Op.between]: [start_date, end_date]
+          $gte: start_date,
+          $lte: end_date
         };
       }
 
-      const notifications = await Notification.findAndCountAll({
-        where: whereConditions,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'full_name', 'email']
-        }],
-        order: [['created_at', 'DESC']]
-      });
+      const total = await Notification.countDocuments(whereConditions);
+      const notifications = await Notification.find(whereConditions)
+        .limit(parseInt(limit))
+        .skip(parseInt(skip))
+        .populate('user_id', 'user_id full_name email')
+        .sort({ created_at: -1 });
 
       res.json({
         success: true,
         data: {
-          notifications: notifications.rows,
+          notifications: notifications,
           pagination: {
-            total: notifications.count,
+            total: total,
             page: parseInt(page),
-            pages: Math.ceil(notifications.count / limit)
+            pages: Math.ceil(total / limit)
           }
         }
       });
@@ -178,27 +173,26 @@ const notificationExtensions = {
       }
 
       const [totalSent, totalRead, byType] = await Promise.all([
-        Notification.count({
-          where: {
-            created_at: { [Op.gte]: startDate.toDate() }
-          }
+        Notification.countDocuments({
+          created_at: { $gte: startDate.toDate() }
         }),
-        Notification.count({
-          where: {
-            created_at: { [Op.gte]: startDate.toDate() },
-            is_read: true
-          }
+        Notification.countDocuments({
+          created_at: { $gte: startDate.toDate() },
+          is_read: true
         }),
-        Notification.findAll({
-          attributes: [
-            'type',
-            [Notification.sequelize.fn('COUNT', '*'), 'count']
-          ],
-          where: {
-            created_at: { [Op.gte]: startDate.toDate() }
+        Notification.aggregate([
+          {
+            $match: {
+              created_at: { $gte: startDate.toDate() }
+            }
           },
-          group: ['type']
-        })
+          {
+            $group: {
+              _id: '$type',
+              count: { $sum: 1 }
+            }
+          }
+        ])
       ]);
 
       res.json({
@@ -209,8 +203,8 @@ const notificationExtensions = {
           totalRead,
           readRate: totalSent > 0 ? ((totalRead / totalSent) * 100).toFixed(2) : 0,
           byType: byType.map(t => ({
-            type: t.type,
-            count: parseInt(t.dataValues.count)
+            type: t._id,
+            count: t.count
           }))
         }
       });
@@ -226,13 +220,10 @@ const notificationExtensions = {
   // Get scheduled notifications
   async getScheduledNotifications(req, res) {
     try {
-      const scheduledNotifications = await Notification.findAll({
-        where: {
-          scheduled_time: { [Op.gt]: new Date() },
-          status: 'scheduled'
-        },
-        order: [['scheduled_time', 'ASC']]
-      });
+      const scheduledNotifications = await Notification.find({
+        scheduled_time: { $gt: new Date() },
+        status: 'scheduled'
+      }).sort({ scheduled_time: 1 });
 
       res.json({
         success: true,
@@ -290,7 +281,7 @@ const notificationExtensions = {
       }
 
       const notifications = await Promise.all(
-        user_ids.map(userId => 
+        user_ids.map(userId =>
           Notification.create({
             user_id: userId,
             title,
@@ -369,10 +360,8 @@ const notificationExtensions = {
       const { id } = req.params;
 
       const notification = await Notification.findOne({
-        where: {
-          notification_id: id,
-          status: 'scheduled'
-        }
+        notification_id: id,
+        status: 'scheduled'
       });
 
       if (!notification) {
@@ -382,7 +371,8 @@ const notificationExtensions = {
         });
       }
 
-      await notification.update({ status: 'failed' });
+      notification.status = 'failed';
+      await notification.save();
 
       res.json({
         success: true,
@@ -410,7 +400,7 @@ const notificationExtensions = {
         });
       }
 
-      const notification = await Notification.findByPk(id);
+      const notification = await Notification.findById(id);
 
       if (!notification) {
         return res.status(404).json({
@@ -419,7 +409,8 @@ const notificationExtensions = {
         });
       }
 
-      await notification.update({ status });
+      notification.status = status;
+      await notification.save();
 
       res.json({
         success: true,
@@ -439,37 +430,32 @@ const notificationExtensions = {
   async exportNotificationHistory(req, res) {
     try {
       const { start_date, end_date, type } = req.query;
-      
+
       const whereConditions = {};
-      
+
       if (start_date && end_date) {
         whereConditions.created_at = {
-          [Op.between]: [start_date, end_date]
+          $gte: start_date,
+          $lte: end_date
         };
       }
-      
+
       if (type) {
         whereConditions.type = type;
       }
 
-      const notifications = await Notification.findAll({
-        where: whereConditions,
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['user_id', 'full_name', 'email']
-        }],
-        order: [['created_at', 'DESC']]
-      });
+      const notifications = await Notification.find(whereConditions)
+        .populate('user_id', 'user_id full_name email')
+        .sort({ created_at: -1 });
 
       // Convert to CSV format
       const csvHeader = 'ID,Title,Message,Type,Priority,User,Status,Created At,Read At\n';
-      const csvData = notifications.map(n => 
-        `${n.notification_id},"${n.title}","${n.message}",${n.type},${n.priority},"${n.user ? n.user.full_name : 'Broadcast'}",${n.status || 'sent'},${n.created_at},${n.read_at || ''}`
+      const csvData = notifications.map(n =>
+        `${n.notification_id},"${n.title}","${n.message}",${n.type},${n.priority},"${n.user_id ? n.user_id.full_name : 'Broadcast'}",${n.status || 'sent'},${n.created_at},${n.read_at || ''}`
       ).join('\n');
 
       const csv = csvHeader + csvData;
-      
+
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=notification-history.csv');
       res.send(csv);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   UserPlusIcon,
   PencilSquareIcon,
@@ -106,10 +106,19 @@ const UserManagement = () => {
     e.preventDefault();
 
     try {
-      const userData = {
-        ...formData,
-        mess_id: formData.mess_id || (isSuperAdmin ? undefined : currentUser.mess_id)
-      };
+      const userData = { ...formData };
+
+      // Handle mess_id properly
+      if (isSuperAdmin) {
+        // Super admin must provide mess_id
+        if (!formData.mess_id) {
+          toast.error('Please select a mess');
+          return;
+        }
+      } else {
+        // Mess admin uses their own mess_id
+        userData.mess_id = currentUser.mess_id;
+      }
 
       await userService.createUser(userData);
       toast.success('User created successfully!');
@@ -126,8 +135,16 @@ const UserManagement = () => {
 
     try {
       const updateData = { ...formData };
+
+      // Remove password if empty
       if (!updateData.password) {
         delete updateData.password;
+      }
+
+      // Handle mess_id for super admin
+      if (isSuperAdmin && !updateData.mess_id) {
+        toast.error('Please select a mess');
+        return;
       }
 
       await userService.updateUser(selectedUser._id || selectedUser.user_id, updateData);
@@ -204,191 +221,195 @@ const UserManagement = () => {
     return badges[status] || badges.inactive;
   };
 
-  const UserFormModal = ({ isEdit }) => (
-    <AnimatePresence>
-      {(showAddModal || showEditModal) && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
-          >
-            {/* Modal Header */}
-            <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-                <UserPlusIcon className="w-7 h-7 text-blue-600" />
-                {isEdit ? 'Edit User' : 'Add New User'}
-              </h2>
-              <button
-                onClick={() => {
-                  isEdit ? setShowEditModal(false) : setShowAddModal(false);
-                  resetForm();
-                }}
-                className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              >
-                <XMarkIcon className="w-6 h-6 text-gray-500" />
-              </button>
-            </div>
+  const UserFormModal = useMemo(() => {
+    const isEdit = showEditModal;
 
-            {/* Modal Body */}
-            <form onSubmit={isEdit ? handleUpdateUser : handleCreateUser} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-              <div className="space-y-6">
-                {/* Mess Selection - Super Admin Only */}
-                {isSuperAdmin && (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Mess Location <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      name="mess_id"
-                      value={formData.mess_id}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
-                      required
-                    >
-                      <option value="">Select Mess</option>
-                      {messes.map((mess) => (
-                        <option key={mess._id || mess.mess_id} value={mess._id || mess.mess_id}>
-                          {mess.name} ({mess.code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* Basic Information */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Full Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="full_name"
-                      value={formData.full_name}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
-                      placeholder="John Doe"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Role <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      name="role"
-                      value={formData.role}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
-                      required
-                    >
-                      <option value="subscriber">Subscriber</option>
-                      <option value="mess_admin">Mess Admin</option>
-                      {isSuperAdmin && <option value="super_admin">Super Admin</option>}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Contact Information */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Email <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
-                      placeholder="user@example.com"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Phone <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleInputChange}
-                      pattern="[0-9]{10}"
-                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
-                      placeholder="10 digits"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Password */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Password {!isEdit && <span className="text-red-500">*</span>}
-                      {isEdit && <span className="text-sm text-gray-500">(leave empty to keep current)</span>}
-                    </label>
-                    <input
-                      type="password"
-                      name="password"
-                      value={formData.password}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
-                      placeholder="••••••••"
-                      required={!isEdit}
-                      minLength="6"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Status <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      name="status"
-                      value={formData.status}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
-                      required
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="suspended">Suspended</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Form Actions */}
-              <div className="flex justify-end gap-4 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+    return (
+      <AnimatePresence>
+        {(showAddModal || showEditModal) && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                  <UserPlusIcon className="w-7 h-7 text-blue-600" />
+                  {isEdit ? 'Edit User' : 'Add New User'}
+                </h2>
                 <button
-                  type="button"
                   onClick={() => {
                     isEdit ? setShowEditModal(false) : setShowAddModal(false);
                     resetForm();
                   }}
-                  className="px-6 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 font-medium transition-colors"
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-medium shadow-lg shadow-blue-500/30 transition-all duration-200"
-                >
-                  {isEdit ? 'Update User' : 'Create User'}
+                  <XMarkIcon className="w-6 h-6 text-gray-500" />
                 </button>
               </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
-  );
+
+              {/* Modal Body */}
+              <form onSubmit={isEdit ? handleUpdateUser : handleCreateUser} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+                <div className="space-y-6">
+                  {/* Mess Selection - Super Admin Only */}
+                  {isSuperAdmin && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        Mess Location <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        name="mess_id"
+                        value={formData.mess_id}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
+                        required
+                      >
+                        <option value="">Select Mess</option>
+                        {messes.map((mess) => (
+                          <option key={mess._id || mess.mess_id} value={mess._id || mess.mess_id}>
+                            {mess.name} ({mess.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Basic Information */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="full_name"
+                        value={formData.full_name}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
+                        placeholder="John Doe"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        Role <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        name="role"
+                        value={formData.role}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
+                        required
+                      >
+                        <option value="subscriber">Subscriber</option>
+                        <option value="mess_admin">Mess Admin</option>
+                        {isSuperAdmin && <option value="super_admin">Super Admin</option>}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Contact Information */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        Email <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
+                        placeholder="user@example.com"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        Phone <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        pattern="[0-9]{10}"
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
+                        placeholder="10 digits"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        Password {!isEdit && <span className="text-red-500">*</span>}
+                        {isEdit && <span className="text-sm text-gray-500">(leave empty to keep current)</span>}
+                      </label>
+                      <input
+                        type="password"
+                        name="password"
+                        value={formData.password}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
+                        placeholder="••••••••"
+                        required={!isEdit}
+                        minLength="6"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        Status <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        name="status"
+                        value={formData.status}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
+                        required
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="suspended">Suspended</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex justify-end gap-4 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      isEdit ? setShowEditModal(false) : setShowAddModal(false);
+                      resetForm();
+                    }}
+                    className="px-6 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-medium shadow-lg shadow-blue-500/30 transition-all duration-200"
+                  >
+                    {isEdit ? 'Update User' : 'Create User'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    );
+  }, [showAddModal, showEditModal, formData, messes, isSuperAdmin, handleInputChange, handleCreateUser, handleUpdateUser, resetForm]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
@@ -595,7 +616,7 @@ const UserManagement = () => {
       </div>
 
       {/* Add/Edit User Modal */}
-      <UserFormModal isEdit={showEditModal} />
+      {UserFormModal}
     </div>
   );
 };

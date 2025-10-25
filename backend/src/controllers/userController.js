@@ -190,16 +190,14 @@ class UserController {
         });
       }
 
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
-
+      // Create user (password will be hashed by pre-save hook)
       const user = await User.create({
         full_name,
         email,
         phone,
         role,
         mess_id: targetMessId,
-        password: hashedPassword,
+        password: password, // Don't hash here - let the pre-save hook handle it
         status: 'active'
       });
 
@@ -248,7 +246,6 @@ class UserController {
       }
 
       // Remove sensitive fields
-      delete updates.password;
       delete updates._id;
 
       // Only super_admin can change mess_id
@@ -256,11 +253,18 @@ class UserController {
         delete updates.mess_id;
       }
 
-      const user = await User.findByIdAndUpdate(
-        id,
-        updates,
-        { new: true, runValidators: true }
-      ).select('-password');
+      // Handle password update separately (will be hashed by pre-save hook)
+      if (updates.password) {
+        existingUser.password = updates.password;
+        delete updates.password;
+      }
+
+      // Update other fields
+      Object.assign(existingUser, updates);
+      await existingUser.save();
+
+      const user = existingUser.toObject();
+      delete user.password;
 
       res.json({
         success: true,
@@ -343,16 +347,15 @@ class UserController {
             continue;
           }
 
-          // Generate default password
+          // Generate default password (will be hashed by pre-save hook)
           const defaultPassword = `${phone}@hostel`;
-          const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
           await User.create({
             full_name,
             email,
             phone,
             role,
-            password: hashedPassword,
+            password: defaultPassword, // Don't hash here - let the pre-save hook handle it
             status: 'active'
           });
 
@@ -455,9 +458,8 @@ class UserController {
         });
       }
 
-      // Hash new password
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      user.password = hashedPassword;
+      // Set new password (will be hashed by pre-save hook)
+      user.password = newPassword;
       await user.save();
 
       res.json({

@@ -14,8 +14,13 @@ const QRScanner = () => {
   const [location, setLocation] = useState(null);
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [todayMeal, setTodayMeal] = useState(null);
+  const [showManualLocation, setShowManualLocation] = useState(false);
+  const [manualLat, setManualLat] = useState('');
+  const [manualLng, setManualLng] = useState('');
+  const [showFileUpload, setShowFileUpload] = useState(false);
   const scannerRef = useRef(null);
   const html5QrcodeScanner = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchTodayMeal();
@@ -48,64 +53,144 @@ const QRScanner = () => {
   };
 
   const getLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          });
-        },
-        (error) => {
-          toast.error('Please enable location services for attendance tracking');
-        }
-      );
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser');
+      setScanError('Geolocation is not supported by your browser');
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        });
+        toast.success('Location enabled successfully!');
+        setShowManualLocation(false);
+      },
+      (error) => {
+        let errorMessage = '';
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = '📍 Location permission denied. You can enter location manually for testing.';
+            setShowManualLocation(true);
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information unavailable. You can enter location manually for testing.';
+            setShowManualLocation(true);
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out. You can enter location manually for testing.';
+            setShowManualLocation(true);
+            break;
+          default:
+            errorMessage = 'An unknown error occurred while getting location.';
+            setShowManualLocation(true);
+        }
+        toast.error(errorMessage, { duration: 5000 });
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+  };
+
+  const setManualLocation = () => {
+    const lat = parseFloat(manualLat);
+    const lng = parseFloat(manualLng);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      toast.error('Please enter valid coordinates');
+      return;
+    }
+
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      toast.error('Invalid coordinates. Lat: -90 to 90, Lng: -180 to 180');
+      return;
+    }
+
+    setLocation({
+      latitude: lat,
+      longitude: lng
+    });
+    toast.success('Manual location set successfully!');
+    setShowManualLocation(false);
   };
 
   const startScanning = () => {
+    if (!location) {
+      toast.error('Please enable location first');
+      return;
+    }
+
     setScanning(true);
     setScanResult(null);
     setScanError(null);
 
-    html5QrcodeScanner.current = new Html5QrcodeScanner(
-      "qr-reader",
-      { 
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0
-      },
-      false
-    );
+    // Small delay to ensure DOM is ready
+    setTimeout(() => {
+      try {
+        html5QrcodeScanner.current = new Html5QrcodeScanner(
+          "qr-reader",
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+            rememberLastUsedCamera: true,
+            showTorchButtonIfSupported: true
+          },
+          false
+        );
 
-    html5QrcodeScanner.current.render(onScanSuccess, onScanFailure);
+        html5QrcodeScanner.current.render(onScanSuccess, onScanFailure);
+      } catch (error) {
+        console.error('Error initializing scanner:', error);
+        toast.error('Failed to initialize camera. Please allow camera permissions.');
+        setScanning(false);
+        setScanError('Failed to initialize camera: ' + error.message);
+      }
+    }, 100);
   };
 
   const onScanSuccess = async (decodedText, decodedResult) => {
+    console.log('🔍 QR Code Scanned!');
+    console.log('📄 Decoded Text:', decodedText);
+    console.log('📦 Decoded Result:', decodedResult);
+
     if (html5QrcodeScanner.current) {
       html5QrcodeScanner.current.clear();
     }
-    
+
     setLoading(true);
     try {
-      const response = await attendanceService.scanQR({
+      // Show what we're sending to the API
+      const requestData = {
         qr_code: decodedText,
         geo_location: location,
         device_id: localStorage.getItem('device_id') || 'web-device'
-      });
+      };
+      console.log('📤 Sending to API:', requestData);
+
+      const response = await attendanceService.scanQR(requestData);
+      console.log('✅ API Response:', response);
 
       setScanResult({
         success: true,
-        message: response.data.message,
-        meal: response.data.meal_type,
+        message: response.data?.message || response.message || 'Attendance marked',
+        meal: response.data?.meal_type || response.meal_type,
         time: new Date().toLocaleTimeString()
       });
-      
+
       toast.success('Attendance marked successfully!');
       fetchAttendanceHistory();
     } catch (error) {
-      setScanError(error.response?.data?.message || 'Invalid QR code');
-      toast.error(error.response?.data?.message || 'Failed to mark attendance');
+      console.error('❌ Error marking attendance:', error);
+      console.error('❌ Error response:', error.response?.data);
+      const errorMsg = error.response?.data?.message || 'Invalid QR code';
+      setScanError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
       setScanning(false);
@@ -114,6 +199,10 @@ const QRScanner = () => {
 
   const onScanFailure = (error) => {
     // Silent fail for scanning attempts - normal QR scanning behavior
+    // Most errors are just "no QR code found" which is expected
+    if (error && !error.includes('NotFoundException')) {
+      console.log('⚠️ Scan error:', error);
+    }
   };
 
   const stopScanning = () => {
@@ -218,16 +307,24 @@ const QRScanner = () => {
             </div>
           ) : (
             <div className="relative">
-              <div id="qr-reader" className="w-full"></div>
+              {/* QR Reader Container */}
+              <div id="qr-reader" className="w-full min-h-[300px]"></div>
+
+              {/* Loading Overlay */}
               {loading && (
-                <div className="absolute inset-0 bg-white dark:bg-gray-800 bg-opacity-90 dark:bg-opacity-90 flex items-center justify-center">
+                <div className="absolute inset-0 bg-white dark:bg-gray-800 bg-opacity-90 dark:bg-opacity-90 flex items-center justify-center z-10">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
                     <p className="text-gray-600 dark:text-gray-400">Verifying QR code...</p>
                   </div>
                 </div>
               )}
-              <div className="p-4 bg-gray-50 dark:bg-gray-700 border-t dark:border-gray-600">
+
+              {/* Scanner Instructions */}
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border-t dark:border-blue-700">
+                <p className="text-sm text-blue-800 dark:text-blue-200 text-center mb-3">
+                  📸 Point your camera at the mess QR code
+                </p>
                 <button
                   onClick={stopScanning}
                   className="flex items-center mx-auto px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
@@ -242,7 +339,7 @@ const QRScanner = () => {
 
         {/* Location Status */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 mb-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center">
               <MdLocationOn className="w-5 h-5 text-primary-600 mr-2" />
               <span className="text-sm font-medium text-gray-900 dark:text-white">Location Services</span>
@@ -253,6 +350,71 @@ const QRScanner = () => {
               {location ? 'Enabled' : 'Disabled'}
             </span>
           </div>
+          {!location && (
+            <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
+              <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-2">
+                ⚠️ Location is required for attendance tracking
+              </p>
+
+              {!showManualLocation ? (
+                <div className="space-y-2">
+                  <button
+                    onClick={getLocation}
+                    className="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors text-sm font-medium"
+                  >
+                    Enable Location
+                  </button>
+                  <button
+                    onClick={() => setShowManualLocation(true)}
+                    className="w-full px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium"
+                  >
+                    Enter Location Manually (Testing)
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mb-2">
+                    For testing: Enter coordinates of the mess location
+                  </p>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    placeholder="Latitude (e.g., 28.6139)"
+                    value={manualLat}
+                    onChange={(e) => setManualLat(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                  <input
+                    type="number"
+                    step="0.000001"
+                    placeholder="Longitude (e.g., 77.2090)"
+                    value={manualLng}
+                    onChange={(e) => setManualLng(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={setManualLocation}
+                      className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
+                    >
+                      Set Location
+                    </button>
+                    <button
+                      onClick={() => setShowManualLocation(false)}
+                      className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {location && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Lat: {location.latitude.toFixed(6)}, Lng: {location.longitude.toFixed(6)}
+            </p>
+          )}
         </div>
 
         {/* Recent Attendance */}

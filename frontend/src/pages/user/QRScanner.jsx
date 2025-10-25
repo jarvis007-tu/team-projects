@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
-import { FiCamera, FiX, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
+import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
+import { FiCamera, FiX, FiCheckCircle, FiAlertCircle, FiUpload } from 'react-icons/fi';
 import { MdQrCodeScanner, MdHistory, MdLocationOn } from 'react-icons/md';
 import attendanceService from '../../services/attendanceService';
 import { toast } from 'react-hot-toast';
@@ -37,8 +37,17 @@ const QRScanner = () => {
   const fetchTodayMeal = async () => {
     try {
       const response = await attendanceService.getTodayMeal();
-      setTodayMeal(response.data);
+      // Backend returns: { success: true, data: { date, day, menu: { breakfast: {...}, lunch: {...} } } }
+      // Extract items from current meal or all meals
+      const menuData = response.data?.data || response.data;
+      if (menuData?.menu) {
+        // Get current meal type
+        const currentMeal = getMealType().toLowerCase();
+        const mealData = menuData.menu[currentMeal] || menuData.menu.breakfast || Object.values(menuData.menu)[0];
+        setTodayMeal(mealData);
+      }
     } catch (error) {
+      console.log('Could not fetch today\'s menu:', error);
       // Error is handled silently as meal info is not critical
     }
   };
@@ -132,26 +141,34 @@ const QRScanner = () => {
     // Small delay to ensure DOM is ready
     setTimeout(() => {
       try {
+        console.log('🎥 Initializing QR Scanner...');
         html5QrcodeScanner.current = new Html5QrcodeScanner(
           "qr-reader",
           {
             fps: 10,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0,
+            qrbox: 250,
+            disableFlip: false,
             rememberLastUsedCamera: true,
-            showTorchButtonIfSupported: true
+            showTorchButtonIfSupported: true,
+            videoConstraints: {
+              facingMode: "environment" // Use back camera
+            },
+            // Enable verbose temporarily for debugging
+            verbose: true
           },
-          false
+          /* verbose= */ true // Enable verbose logging to see what's happening
         );
 
+        console.log('✅ Scanner initialized, rendering...');
         html5QrcodeScanner.current.render(onScanSuccess, onScanFailure);
+        console.log('✅ Scanner rendered and ready');
       } catch (error) {
-        console.error('Error initializing scanner:', error);
+        console.error('❌ Error initializing scanner:', error);
         toast.error('Failed to initialize camera. Please allow camera permissions.');
         setScanning(false);
         setScanError('Failed to initialize camera: ' + error.message);
       }
-    }, 100);
+    }, 300); // Increased delay for better DOM readiness
   };
 
   const onScanSuccess = async (decodedText, decodedResult) => {
@@ -188,9 +205,10 @@ const QRScanner = () => {
     } catch (error) {
       console.error('❌ Error marking attendance:', error);
       console.error('❌ Error response:', error.response?.data);
-      const errorMsg = error.response?.data?.message || 'Invalid QR code';
+      console.error('❌ Error status:', error.response?.status);
+      const errorMsg = error.response?.data?.message || error.message || 'Invalid QR code';
       setScanError(errorMsg);
-      toast.error(errorMsg);
+      toast.error(errorMsg, { duration: 5000 });
     } finally {
       setLoading(false);
       setScanning(false);
@@ -199,8 +217,11 @@ const QRScanner = () => {
 
   const onScanFailure = (error) => {
     // Silent fail for scanning attempts - normal QR scanning behavior
-    // Most errors are just "no QR code found" which is expected
-    if (error && !error.includes('NotFoundException')) {
+    // NotFoundException just means "no QR code in frame yet" - completely normal
+    // Only log non-NotFoundException errors
+    if (error && typeof error === 'string' &&
+        !error.includes('NotFoundException') &&
+        !error.includes('No MultiFormat Readers')) {
       console.log('⚠️ Scan error:', error);
     }
   };
@@ -210,6 +231,35 @@ const QRScanner = () => {
       html5QrcodeScanner.current.clear();
     }
     setScanning(false);
+  };
+
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!location) {
+      toast.error('Please enable location first');
+      return;
+    }
+
+    console.log('📁 File selected for QR scanning:', file.name);
+    setLoading(true);
+
+    try {
+      const html5QrCode = new Html5Qrcode("qr-file-reader");
+      const decodedText = await html5QrCode.scanFile(file, true);
+      console.log('✅ QR decoded from file:', decodedText);
+      await onScanSuccess(decodedText, { decodedText });
+    } catch (error) {
+      console.error('❌ Error scanning file:', error);
+      toast.error('Failed to scan QR code from image. Make sure the image contains a valid QR code.');
+      setLoading(false);
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const getMealType = () => {
@@ -239,7 +289,7 @@ const QRScanner = () => {
             <div className="text-right">
               <p className="text-sm text-gray-600 dark:text-gray-400">Today's Menu</p>
               <p className="font-medium text-gray-900 dark:text-white">
-                {todayMeal ? todayMeal.items.join(', ') : 'Loading...'}
+                {todayMeal?.items ? todayMeal.items.join(', ') : 'Loading...'}
               </p>
             </div>
           </div>
@@ -293,22 +343,37 @@ const QRScanner = () => {
                   </div>
                   <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Ready to Scan</h3>
                   <p className="text-gray-600 dark:text-gray-400 mb-6">
-                    Position the QR code within the camera frame
+                    Position the QR code within the camera frame or upload an image
                   </p>
-                  <button
-                    onClick={startScanning}
-                    className="flex items-center mx-auto px-8 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-                  >
-                    <FiCamera className="w-5 h-5 mr-2" />
-                    Start Scanning
-                  </button>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button
+                      onClick={startScanning}
+                      className="flex items-center justify-center px-8 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+                    >
+                      <FiCamera className="w-5 h-5 mr-2" />
+                      Scan with Camera
+                    </button>
+                    <label className="flex items-center justify-center px-8 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors cursor-pointer">
+                      <FiUpload className="w-5 h-5 mr-2" />
+                      Upload QR Image
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  {/* Hidden div for file scanning */}
+                  <div id="qr-file-reader" className="hidden"></div>
                 </div>
               )}
             </div>
           ) : (
             <div className="relative">
-              {/* QR Reader Container */}
-              <div id="qr-reader" className="w-full min-h-[300px]"></div>
+              {/* QR Reader Container - Increased height for better rendering */}
+              <div id="qr-reader" className="w-full min-h-[400px]"></div>
 
               {/* Loading Overlay */}
               {loading && (
@@ -322,16 +387,39 @@ const QRScanner = () => {
 
               {/* Scanner Instructions */}
               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border-t dark:border-blue-700">
-                <p className="text-sm text-blue-800 dark:text-blue-200 text-center mb-3">
-                  📸 Point your camera at the mess QR code
-                </p>
-                <button
-                  onClick={stopScanning}
-                  className="flex items-center mx-auto px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  <FiX className="w-5 h-5 mr-2" />
-                  Cancel Scanning
-                </button>
+                <div className="mb-3 space-y-2">
+                  <p className="text-sm text-blue-800 dark:text-blue-200 text-center font-semibold">
+                    📸 Scanning Tips:
+                  </p>
+                  <ul className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                    <li>• Hold steady and center the QR code in the frame</li>
+                    <li>• Ensure good lighting - avoid shadows</li>
+                    <li>• Keep QR code within the red box</li>
+                    <li>• Try moving closer or farther if not scanning</li>
+                  </ul>
+                </div>
+                <div className="flex gap-2 justify-center">
+                  <button
+                    onClick={stopScanning}
+                    className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
+                  >
+                    <FiX className="w-4 h-4 mr-2" />
+                    Cancel
+                  </button>
+                  <label className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors cursor-pointer text-sm">
+                    <FiUpload className="w-4 h-4 mr-2" />
+                    Upload Instead
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        stopScanning();
+                        handleFileUpload(e);
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           )}
@@ -423,7 +511,7 @@ const QRScanner = () => {
             <MdHistory className="w-5 h-5 text-gray-600 mr-2" />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Attendance</h3>
           </div>
-          {attendanceHistory.length > 0 ? (
+          {attendanceHistory && attendanceHistory.length > 0 ? (
             <div className="space-y-3">
               {attendanceHistory.map((record, index) => (
                 <div key={index} className="flex items-center justify-between py-2 border-b dark:border-gray-600 last:border-0">

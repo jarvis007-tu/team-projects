@@ -26,8 +26,20 @@ class MenuController {
         if (!acc[item.day]) {
           acc[item.day] = {};
         }
+
+        // Handle both string and already parsed items
+        let items = item.items;
+        if (typeof items === 'string') {
+          try {
+            items = JSON.parse(items);
+          } catch (e) {
+            logger.error('Error parsing menu items:', e);
+            items = [];
+          }
+        }
+
         acc[item.day][item.meal_type] = {
-          items: JSON.parse(item.items),
+          items: items,
           special_note: item.special_note
         };
         return acc;
@@ -66,8 +78,19 @@ class MenuController {
         .sort({ meal_type: 1 });
 
       const todayMenu = menu.reduce((acc, item) => {
+        // Handle both string and already parsed items
+        let items = item.items;
+        if (typeof items === 'string') {
+          try {
+            items = JSON.parse(items);
+          } catch (e) {
+            logger.error('Error parsing menu items:', e);
+            items = [];
+          }
+        }
+
         acc[item.meal_type] = {
-          items: JSON.parse(item.items),
+          items: items,
           special_note: item.special_note
         };
         return acc;
@@ -85,7 +108,8 @@ class MenuController {
       logger.error('Error fetching today menu:', error);
       res.status(500).json({
         success: false,
-        message: 'Failed to fetch today\'s menu'
+        message: 'Failed to fetch today\'s menu',
+        error: error.message
       });
     }
   }

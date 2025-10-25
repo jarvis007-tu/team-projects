@@ -33,10 +33,16 @@ const UserSchema = new mongoose.Schema({
     maxlength: [255, 'Password is too long'],
     select: false // Don't include password in queries by default
   },
+  mess_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Mess',
+    required: [true, 'Mess ID is required'],
+    index: true
+  },
   role: {
     type: String,
     enum: {
-      values: ['admin', 'subscriber'],
+      values: ['super_admin', 'mess_admin', 'subscriber'],
       message: '{VALUE} is not a valid role'
     },
     default: 'subscriber'
@@ -105,6 +111,9 @@ UserSchema.index({ phone: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ status: 1 });
 UserSchema.index({ device_id: 1 });
+UserSchema.index({ mess_id: 1 });
+UserSchema.index({ mess_id: 1, role: 1 });
+UserSchema.index({ mess_id: 1, status: 1 });
 UserSchema.index({ createdAt: -1 });
 
 // Pre-save middleware to hash password

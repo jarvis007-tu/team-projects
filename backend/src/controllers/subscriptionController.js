@@ -1,17 +1,22 @@
 const moment = require('moment');
 const User = require('../models/User');
+const Mess = require('../models/Mess');
 const Subscription = require('../models/Subscription');
 const logger = require('../utils/logger');
 const mongoose = require('mongoose');
+const { addMessFilter } = require('../utils/messHelpers');
 
 class SubscriptionController {
   // Get all subscriptions (Admin only)
   async getAllSubscriptions(req, res) {
     try {
-      const { page = 1, limit = 10, status, plan_type, user_id } = req.query;
+      const { page = 1, limit = 10, status, plan_type, user_id, mess_id } = req.query;
       const skip = (page - 1) * limit;
 
-      const queryConditions = {};
+      const queryConditions = { deleted_at: null };
+
+      // Add mess filtering
+      addMessFilter(queryConditions, req.user, mess_id);
 
       if (status) queryConditions.status = status;
       if (plan_type) queryConditions.plan_type = plan_type;
@@ -22,6 +27,7 @@ class SubscriptionController {
           .limit(parseInt(limit))
           .skip(skip)
           .populate('user_id', 'full_name email phone')
+          .populate('mess_id', 'name code')
           .sort({ createdAt: -1 }),
         Subscription.countDocuments(queryConditions)
       ]);
@@ -75,6 +81,7 @@ class SubscriptionController {
 
       const subscription = await Subscription.findOne({
         user_id: userId,
+        mess_id: req.user.mess_id,
         status: 'active',
         start_date: { $lte: today },
         end_date: { $gte: today }

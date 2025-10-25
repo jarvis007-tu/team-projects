@@ -77,9 +77,10 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(true);
       
       toast.success('Login successful!');
-      
+
       // Navigate based on role
-      const targetPath = user.role === 'admin' ? '/admin/dashboard' : '/user/dashboard';
+      const isAdmin = user.role === 'super_admin' || user.role === 'mess_admin';
+      const targetPath = isAdmin ? '/admin/dashboard' : '/user/dashboard';
       navigate(targetPath, { replace: true });
       
       return response;
@@ -174,7 +175,9 @@ export const AuthProvider = ({ children }) => {
     updateUser: setUser,
     refreshToken,
     checkAuth,
-    isAdmin: user?.role === 'admin',
+    isAdmin: user?.role === 'super_admin' || user?.role === 'mess_admin',
+    isSuperAdmin: user?.role === 'super_admin',
+    isMessAdmin: user?.role === 'mess_admin',
     isSubscriber: user?.role === 'subscriber',
   };
 

@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const NotificationSchema = new mongoose.Schema({
+  mess_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Mess',
+    default: null, // Null means broadcast to all messes
+    index: true
+  },
   user_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

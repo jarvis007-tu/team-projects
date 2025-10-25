@@ -11,7 +11,7 @@ router.get('/my-confirmations', authenticate, mealConfirmationController.getUser
 router.post('/bulk-confirm', authenticate, validateBulkConfirmation, mealConfirmationController.bulkConfirmMeals);
 
 // Admin routes
-router.get('/date-confirmations', authenticate, authorize('admin'), mealConfirmationController.getDateConfirmations);
-router.get('/stats', authenticate, authorize('admin'), mealConfirmationController.getConfirmationStats);
+router.get('/date-confirmations', authenticate, authorize('super_admin', 'mess_admin'), mealConfirmationController.getDateConfirmations);
+router.get('/stats', authenticate, authorize('super_admin', 'mess_admin'), mealConfirmationController.getConfirmationStats);
 
 module.exports = router;

@@ -15,7 +15,8 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   // Check role-based access
   if (allowedRoles.length > 0 && !allowedRoles.includes(user?.role)) {
     // Redirect to appropriate dashboard based on user role
-    const redirectPath = user?.role === 'admin' ? '/admin/dashboard' : '/user/dashboard';
+    const isAdmin = user?.role === 'super_admin' || user?.role === 'mess_admin';
+    const redirectPath = isAdmin ? '/admin/dashboard' : '/user/dashboard';
     return <Navigate to={redirectPath} replace />;
   }
 

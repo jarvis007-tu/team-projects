@@ -1,21 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiUser, FiMail, FiPhone, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
+import { FiUser, FiMail, FiPhone, FiLock, FiEye, FiEyeOff, FiMapPin } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import authService from '../../services/authService';
+import apiClient from '../../services/apiClient';
 
 const Register = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingMesses, setLoadingMesses] = useState(true);
+  const [messes, setMesses] = useState([]);
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
     phone: '',
     password: '',
-    confirm_password: ''
+    confirm_password: '',
+    mess_id: ''
   });
+
+  // Fetch active messes on component mount
+  useEffect(() => {
+    fetchActiveMesses();
+  }, []);
+
+  const fetchActiveMesses = async () => {
+    try {
+      const response = await apiClient.get('/messes/active');
+      if (response.data.success) {
+        setMesses(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching messes:', error);
+      toast.error('Failed to load messes');
+    } finally {
+      setLoadingMesses(false);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({
@@ -26,15 +49,20 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validation
+    if (!formData.mess_id) {
+      toast.error('Please select a mess');
+      return;
+    }
+
     if (formData.password !== formData.confirm_password) {
       toast.error('Passwords do not match');
       return;
     }
 
-    if (formData.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    if (formData.password.length < 8) {
+      toast.error('Password must be at least 8 characters');
       return;
     }
 
@@ -44,7 +72,8 @@ const Register = () => {
         full_name: formData.full_name,
         email: formData.email,
         phone: formData.phone,
-        password: formData.password
+        password: formData.password,
+        mess_id: formData.mess_id
       });
 
       if (response.success) {
@@ -135,6 +164,40 @@ const Register = () => {
                   required
                 />
               </div>
+            </div>
+
+            {/* Mess Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Your Mess *
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FiMapPin className="h-5 w-5 text-gray-400" />
+                </div>
+                <select
+                  name="mess_id"
+                  value={formData.mess_id}
+                  onChange={handleChange}
+                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all appearance-none bg-white"
+                  required
+                  disabled={loadingMesses}
+                >
+                  <option value="">
+                    {loadingMesses ? 'Loading messes...' : 'Choose your mess location'}
+                  </option>
+                  {messes.map((mess) => (
+                    <option key={mess.mess_id} value={mess.mess_id}>
+                      {mess.name} - {mess.city}, {mess.state}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {formData.mess_id && (
+                <p className="mt-2 text-sm text-gray-500">
+                  {messes.find(m => m.mess_id === formData.mess_id)?.address}
+                </p>
+              )}
             </div>
 
             {/* Password */}

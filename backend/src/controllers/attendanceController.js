@@ -1,7 +1,9 @@
 const mongoose = require('mongoose');
 const moment = require('moment');
 const geolib = require('geolib');
+const crypto = require('crypto');
 const User = require('../models/User');
+const Mess = require('../models/Mess');
 const Subscription = require('../models/Subscription');
 const Attendance = require('../models/Attendance');
 const MealConfirmation = require('../models/MealConfirmation');
@@ -9,6 +11,57 @@ const logger = require('../utils/logger');
 const { verifyQRCode } = require('../services/qrService');
 
 class AttendanceController {
+  // Helper method to verify mess QR code
+  verifyMessQRCode(qrCodeString) {
+    try {
+      const qrData = JSON.parse(qrCodeString);
+
+      // Check if it's a mess QR code
+      if (qrData.type !== 'MESS_QR') {
+        return { valid: false, message: 'Invalid QR code type' };
+      }
+
+      // Verify signature
+      const { signature, ...dataToVerify } = qrData;
+      const expectedSignature = crypto
+        .createHmac('sha256', process.env.JWT_SECRET || 'default-secret')
+        .update(JSON.stringify(dataToVerify))
+        .digest('hex');
+
+      if (signature !== expectedSignature) {
+        return { valid: false, message: 'QR code signature verification failed' };
+      }
+
+      return { valid: true, data: qrData };
+    } catch (error) {
+      logger.error('Error verifying mess QR code:', error);
+      return { valid: false, message: 'Invalid QR code format' };
+    }
+  }
+
+  // Helper method to determine current meal type
+  getCurrentMealType() {
+    const now = moment();
+    const hour = now.hour();
+    const minute = now.minute();
+    const currentTime = hour * 60 + minute; // Convert to minutes
+
+    // Breakfast: 7:00 AM - 10:00 AM
+    if (currentTime >= 7 * 60 && currentTime < 10 * 60) {
+      return 'breakfast';
+    }
+    // Lunch: 12:00 PM - 3:00 PM
+    else if (currentTime >= 12 * 60 && currentTime < 15 * 60) {
+      return 'lunch';
+    }
+    // Dinner: 7:00 PM - 10:00 PM
+    else if (currentTime >= 19 * 60 && currentTime < 22 * 60) {
+      return 'dinner';
+    }
+
+    return null;
+  }
+
   // Scan QR code for attendance
   async scanQR(req, res) {
     const session = await mongoose.startSession();
@@ -18,15 +71,60 @@ class AttendanceController {
       const { qr_code, geo_location, device_id } = req.body;
       const userId = req.user.id;
 
-      // Verify QR code
-      const qrData = await verifyQRCode(qr_code);
+      // Verify mess QR code
+      const qrVerification = this.verifyMessQRCode(qr_code);
 
-      if (!qrData.valid) {
+      if (!qrVerification.valid) {
         await session.abortTransaction();
         session.endSession();
         return res.status(400).json({
           success: false,
-          message: qrData.message || 'Invalid QR code'
+          message: qrVerification.message || 'Invalid QR code'
+        });
+      }
+
+      const qrData = qrVerification.data;
+
+      // Get user's mess information
+      const user = await User.findById(userId);
+      if (!user) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // Verify user belongs to the mess in the QR code
+      if (user.mess_id.toString() !== qrData.mess_id) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(403).json({
+          success: false,
+          message: `This QR code belongs to ${qrData.name}. You are not authorized to scan it.`
+        });
+      }
+
+      // Get mess details
+      const mess = await Mess.findById(user.mess_id);
+      if (!mess) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({
+          success: false,
+          message: 'Mess not found'
+        });
+      }
+
+      // Determine current meal type based on time
+      const mealType = this.getCurrentMealType();
+      if (!mealType) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(403).json({
+          success: false,
+          message: 'No meal service available at this time'
         });
       }
 
@@ -34,6 +132,7 @@ class AttendanceController {
       const today = moment().format('YYYY-MM-DD');
       const subscription = await Subscription.findOne({
         user_id: userId,
+        mess_id: user.mess_id,
         status: 'active',
         start_date: { $lte: today },
         end_date: { $gte: today }
@@ -48,30 +147,40 @@ class AttendanceController {
         });
       }
 
-      // Verify geolocation
-      if (geo_location && process.env.MESS_LATITUDE && process.env.MESS_LONGITUDE) {
+      // Verify geolocation using coordinates from QR code
+      if (geo_location && qrData.latitude && qrData.longitude) {
         const distance = geolib.getDistance(
           { latitude: geo_location.latitude, longitude: geo_location.longitude },
-          { latitude: parseFloat(process.env.MESS_LATITUDE), longitude: parseFloat(process.env.MESS_LONGITUDE) }
+          { latitude: qrData.latitude, longitude: qrData.longitude }
         );
 
-        const maxRadius = parseInt(process.env.MESS_RADIUS_METERS) || 200;
+        const maxRadius = qrData.radius_meters || 200;
 
         if (distance > maxRadius) {
           await session.abortTransaction();
           session.endSession();
           return res.status(403).json({
             success: false,
-            message: 'You are outside the mess premises'
+            message: `You are outside the ${qrData.name} premises. Distance: ${distance}m, Max allowed: ${maxRadius}m`
           });
         }
+
+        logger.info(`Geolocation verified for user ${userId} at ${qrData.name}: ${distance}m from mess`);
+      } else if (!geo_location) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          success: false,
+          message: 'Geolocation is required for attendance'
+        });
       }
 
       // Check for duplicate scan
       const existingAttendance = await Attendance.findOne({
         user_id: userId,
+        mess_id: user.mess_id,
         scan_date: today,
-        meal_type: qrData.meal_type
+        meal_type: mealType
       }).session(session);
 
       if (existingAttendance) {
@@ -84,11 +193,13 @@ class AttendanceController {
       }
 
       // Check meal confirmation if required
-      if (process.env.REQUIRE_MEAL_CONFIRMATION === 'true') {
+      const requireConfirmation = mess.settings?.allow_meal_confirmation !== false;
+      if (requireConfirmation) {
         const confirmation = await MealConfirmation.findOne({
           user_id: userId,
+          mess_id: user.mess_id,
           meal_date: today,
-          meal_type: qrData.meal_type,
+          meal_type: mealType,
           status: 'confirmed'
         }).session(session);
 
@@ -109,9 +220,10 @@ class AttendanceController {
       // Create attendance record
       const attendance = await Attendance.create([{
         user_id: userId,
-        subscription_id: subscription.subscription_id,
+        mess_id: user.mess_id,
+        subscription_id: subscription._id,
         scan_date: today,
-        meal_type: qrData.meal_type,
+        meal_type: mealType,
         scan_time: new Date(),
         qr_code,
         geo_location,
@@ -124,8 +236,12 @@ class AttendanceController {
 
       res.json({
         success: true,
-        message: 'Attendance marked successfully',
-        data: attendance[0]
+        message: `Attendance marked successfully for ${mealType}`,
+        data: {
+          attendance: attendance[0],
+          meal_type: mealType,
+          mess_name: qrData.name
+        }
       });
     } catch (error) {
       await session.abortTransaction();

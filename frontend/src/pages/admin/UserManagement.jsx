@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   UserPlusIcon,
   PencilSquareIcon,
@@ -45,9 +45,18 @@ const UserManagement = () => {
     status: 'active'
   });
 
+  // Fetch messes only once on mount
   useEffect(() => {
-    fetchUsers();
     fetchMesses();
+  }, []);
+
+  // Fetch users with debouncing for search
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      fetchUsers();
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
   }, [currentPage, searchTerm, filterRole, filterStatus, filterMess]);
 
   const fetchMesses = async () => {
@@ -94,13 +103,13 @@ const UserManagement = () => {
     }
   };
 
-  const handleInputChange = (e) => {
+  const handleInputChange = useCallback((e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
-  };
+  }, []); // Empty deps - function never needs to change
 
   const handleCreateUser = async (e) => {
     e.preventDefault();

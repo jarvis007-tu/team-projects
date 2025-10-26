@@ -6,7 +6,6 @@ import {
 } from 'react-icons/fi';
 import { MdSubscriptions, MdCancel, MdAutorenew } from 'react-icons/md';
 import subscriptionService from '../../services/subscriptionService';
-import userService from '../../services/userService';
 import messService from '../../services/messService';
 import { toast } from 'react-hot-toast';
 
@@ -17,6 +16,8 @@ const AdminSubscriptions = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPlan, setFilterPlan] = useState('all');
+  const [filterMess, setFilterMess] = useState('all');
+  const [filterExpiringSoon, setFilterExpiringSoon] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [currentSubscription, setCurrentSubscription] = useState(null);
@@ -25,12 +26,9 @@ const AdminSubscriptions = () => {
   const [subscriptionPlans, setSubscriptionPlans] = useState([]);
   const [analytics, setAnalytics] = useState({});
   const [messes, setMesses] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
 
   const [newSubscription, setNewSubscription] = useState({
     mess_id: '',
-    user_id: '',
     plan_id: '',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
@@ -42,7 +40,7 @@ const AdminSubscriptions = () => {
     fetchSubscriptionPlans();
     fetchAnalytics();
     fetchMesses();
-  }, [currentPage, searchTerm, filterStatus, filterPlan]);
+  }, [currentPage, searchTerm, filterStatus, filterPlan, filterMess, filterExpiringSoon]);
 
   const fetchSubscriptions = async () => {
     setLoading(true);
@@ -51,7 +49,9 @@ const AdminSubscriptions = () => {
         page: currentPage,
         search: searchTerm,
         status: filterStatus !== 'all' ? filterStatus : undefined,
-        plan: filterPlan !== 'all' ? filterPlan : undefined
+        plan: filterPlan !== 'all' ? filterPlan : undefined,
+        mess_id: filterMess !== 'all' ? filterMess : undefined,
+        expiring_soon: filterExpiringSoon ? 'true' : undefined
       });
       setSubscriptions(response.data.subscriptions);
       setTotalPages(response.data.pagination.pages);
@@ -95,26 +95,6 @@ const AdminSubscriptions = () => {
     }
   };
 
-  const fetchUsersByMess = async (messId) => {
-    if (!messId) {
-      setUsers([]);
-      return;
-    }
-
-    setLoadingUsers(true);
-    try {
-      const response = await userService.getAllUsers({ mess_id: messId, limit: 1000 });
-      // Handle different response structures
-      const usersData = response.data?.users || response.data || response.users || response || [];
-      setUsers(Array.isArray(usersData) ? usersData : []);
-    } catch (error) {
-      console.error('Failed to fetch users:', error);
-      toast.error('Failed to load users for selected mess');
-      setUsers([]);
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
@@ -135,10 +115,8 @@ const AdminSubscriptions = () => {
   const handleMessChange = (messId) => {
     setNewSubscription({
       ...newSubscription,
-      mess_id: messId,
-      user_id: '' // Reset user selection when mess changes
+      mess_id: messId
     });
-    fetchUsersByMess(messId);
   };
 
   const handleCreateSubscription = async (e) => {
@@ -149,13 +127,11 @@ const AdminSubscriptions = () => {
       setShowCreateModal(false);
       setNewSubscription({
         mess_id: '',
-        user_id: '',
         plan_id: '',
         start_date: new Date().toISOString().split('T')[0],
         end_date: '',
         status: 'active'
       });
-      setUsers([]); // Clear users list
       fetchSubscriptions();
     } catch (error) {
       toast.error('Failed to create subscription');
@@ -388,6 +364,38 @@ const AdminSubscriptions = () => {
                   </option>
                 ))}
               </select>
+
+              {/* Mess Filter */}
+              <select
+                value={filterMess}
+                onChange={(e) => setFilterMess(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+              >
+                <option value="all">All Mess Outlets</option>
+                {Array.isArray(messes) && messes.map(mess => {
+                  const messId = mess._id || mess.id || mess.mess_id;
+                  return (
+                    <option key={messId} value={messId}>
+                      {mess.name} ({mess.code})
+                    </option>
+                  );
+                })}
+              </select>
+
+              {/* Expiring Soon Filter */}
+              <button
+                onClick={() => setFilterExpiringSoon(!filterExpiringSoon)}
+                className={`px-4 py-2 border rounded-lg transition-colors ${
+                  filterExpiringSoon
+                    ? 'bg-orange-500 text-white border-orange-500'
+                    : 'bg-white text-gray-900 border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:hover:bg-gray-700'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <FiCalendar className="w-4 h-4" />
+                  <span>Expiring Soon (2 weeks)</span>
+                </div>
+              </button>
             </div>
 
             {/* Bulk Actions */}
@@ -618,36 +626,6 @@ const AdminSubscriptions = () => {
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     First select the mess to load its users
                   </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                    Select User *
-                  </label>
-                  <select
-                    value={newSubscription.user_id}
-                    onChange={(e) => setNewSubscription({...newSubscription, user_id: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed"
-                    required
-                    disabled={!newSubscription.mess_id || loadingUsers}
-                  >
-                    <option value="">
-                      {loadingUsers ? 'Loading users...' : !newSubscription.mess_id ? '-- Select mess first --' : '-- Select User --'}
-                    </option>
-                    {Array.isArray(users) && users.map(user => {
-                      const userId = user._id || user.id || user.user_id;
-                      return (
-                        <option key={userId} value={userId}>
-                          {user.full_name} ({user.email})
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {newSubscription.mess_id && users.length === 0 && !loadingUsers && (
-                    <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
-                      No users found for this mess
-                    </p>
-                  )}
                 </div>
 
                 <div>

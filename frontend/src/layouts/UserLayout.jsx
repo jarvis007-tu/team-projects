@@ -130,6 +130,15 @@ const UserLayout = () => {
                 )}
               </button>
 
+              {/* QR Scanner */}
+              <NavLink
+                to="/user/scan"
+                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 relative"
+                title="Scan QR Code"
+              >
+                <QrCodeIcon className="h-5 w-5 dark:text-gray-400" />
+              </NavLink>
+
               {/* Notifications */}
               <NavLink
                 to="/user/notifications"

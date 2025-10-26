@@ -498,22 +498,20 @@ const AdminReports = () => {
         {/* Report Navigation & Filters */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-            {/* Report Type Selection */}
-            <div className="flex flex-wrap gap-2">
-              {reportTypes.map((report) => (
-                <button
-                  key={report.id}
-                  onClick={() => setActiveReport(report.id)}
-                  className={`flex items-center px-4 py-2 rounded-lg font-medium transition-colors ${
-                    activeReport === report.id
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  <report.icon className="w-4 h-4 mr-2" />
-                  {report.name}
-                </button>
-              ))}
+            {/* Report Type Selection - Dropdown */}
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Select Report:</label>
+              <select
+                value={activeReport}
+                onChange={(e) => setActiveReport(e.target.value)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:text-white min-w-[250px]"
+              >
+                {reportTypes.map((report) => (
+                  <option key={report.id} value={report.id}>
+                    {report.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Date Range Filter */}

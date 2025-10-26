@@ -6,6 +6,7 @@ import {
 } from 'react-icons/fi';
 import { MdNotifications, MdSchedule, MdGroup, MdHistory } from 'react-icons/md';
 import notificationService from '../../services/notificationService';
+import messService from '../../services/messService';
 import { toast } from 'react-hot-toast';
 
 const AdminNotifications = () => {
@@ -19,13 +20,14 @@ const AdminNotifications = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [currentTemplate, setCurrentTemplate] = useState(null);
+  const [messes, setMesses] = useState([]);
 
   const [newNotification, setNewNotification] = useState({
     title: '',
     message: '',
     type: 'general', // general, alert, reminder, update
-    target_audience: 'all', // all, active_subscribers, specific_users
-    specific_users: '',
+    target_audience: 'all', // all, active_subscribers, mess_outlet
+    mess_id: '',
     schedule_type: 'immediate', // immediate, scheduled
     scheduled_at: '',
     priority: 'normal' // low, normal, high
@@ -52,7 +54,20 @@ const AdminNotifications = () => {
 
   useEffect(() => {
     fetchData();
+    fetchMesses();
   }, [activeTab, searchTerm, filterStatus]);
+
+  const fetchMesses = async () => {
+    try {
+      const response = await messService.getAllMesses();
+      const messesData = response.data?.messes || response.data || response.messes || response || [];
+      const messesArray = Array.isArray(messesData) ? messesData : [];
+      setMesses(messesArray);
+    } catch (error) {
+      console.error('Failed to fetch messes:', error);
+      setMesses([]);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -116,12 +131,12 @@ const AdminNotifications = () => {
     try {
       if (newNotification.target_audience === 'all') {
         await notificationService.sendBulkNotification(newNotification);
-      } else if (newNotification.target_audience === 'specific_users') {
-        const userIds = newNotification.specific_users.split(',').map(id => id.trim());
-        await notificationService.sendTargetedNotification({
-          ...newNotification,
-          user_ids: userIds
-        });
+      } else if (newNotification.target_audience === 'mess_outlet') {
+        if (!newNotification.mess_id) {
+          toast.error('Please select a mess outlet');
+          return;
+        }
+        await notificationService.sendTargetedNotification(newNotification);
       } else {
         await notificationService.sendTargetedNotification(newNotification);
       }
@@ -137,7 +152,7 @@ const AdminNotifications = () => {
         message: '',
         type: 'general',
         target_audience: 'all',
-        specific_users: '',
+        mess_id: '',
         schedule_type: 'immediate',
         scheduled_at: '',
         priority: 'normal'
@@ -452,7 +467,7 @@ const AdminNotifications = () => {
                       >
                         <option value="all">All Users</option>
                         <option value="active_subscribers">Active Subscribers</option>
-                        <option value="specific_users">Specific Users</option>
+                        <option value="mess_outlet">Specific Mess Outlet</option>
                       </select>
                     </div>
                     <div>
@@ -469,18 +484,27 @@ const AdminNotifications = () => {
                         <option value="high">High</option>
                       </select>
                     </div>
-                    {newNotification.target_audience === 'specific_users' && (
+                    {newNotification.target_audience === 'mess_outlet' && (
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                          User IDs (comma-separated)
+                          Select Mess Outlet
                         </label>
-                        <input
-                          type="text"
-                          value={newNotification.specific_users}
-                          onChange={(e) => setNewNotification({...newNotification, specific_users: e.target.value})}
-                          placeholder="e.g., 1, 2, 3, 4"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
-                        />
+                        <select
+                          value={newNotification.mess_id}
+                          onChange={(e) => setNewNotification({...newNotification, mess_id: e.target.value})}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                          required
+                        >
+                          <option value="">-- Select Mess Outlet --</option>
+                          {Array.isArray(messes) && messes.map(mess => {
+                            const messId = mess._id || mess.id || mess.mess_id;
+                            return (
+                              <option key={messId} value={messId}>
+                                {mess.name} ({mess.code})
+                              </option>
+                            );
+                          })}
+                        </select>
                       </div>
                     )}
                     <div>

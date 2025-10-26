@@ -148,13 +148,18 @@ const MessSchema = new mongoose.Schema({
     default: null
   },
   qr_data: {
+    type: {
+      type: String,
+      default: 'MESS_QR'
+    },
     mess_id: String,
     name: String,
     code: String,
     latitude: Number,
     longitude: Number,
     radius_meters: Number,
-    generated_at: Date
+    generated_at: Date,
+    signature: String
   },
   deleted_at: {
     type: Date,

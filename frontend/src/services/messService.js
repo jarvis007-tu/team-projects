@@ -58,13 +58,15 @@ const messService = {
   // Get mess QR code
   getMessQRCode: async (messId) => {
     const response = await api.get(`/messes/${messId}/qr-code`);
-    return response.data;
+    // Axios interceptor already unwraps to response.data, so just return response
+    return response;
   },
 
   // Regenerate mess QR code
   regenerateMessQR: async (messId) => {
     const response = await api.post(`/messes/${messId}/regenerate-qr`);
-    return response.data;
+    // Axios interceptor already unwraps to response.data, so just return response
+    return response;
   }
 };
 

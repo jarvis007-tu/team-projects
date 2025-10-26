@@ -360,6 +360,17 @@ const Dashboard = () => {
           )}
         </div>
       </div>
+
+      {/* QR Scan Button at Bottom */}
+      <div className="mt-8 flex justify-center pb-6">
+        <Link
+          to="/user/scan"
+          className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white rounded-2xl shadow-xl shadow-primary-500/30 transition-all duration-200 transform hover:scale-105 font-semibold"
+        >
+          <QrCodeIcon className="h-6 w-6" />
+          <span className="text-lg">Scan QR Code for Meal</span>
+        </Link>
+      </div>
     </div>
   );
 };

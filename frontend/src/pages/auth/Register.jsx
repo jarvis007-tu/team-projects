@@ -34,7 +34,7 @@ const Register = () => {
       }
     } catch (error) {
       console.error('Error fetching messes:', error);
-      toast.error('Failed to load messes');
+      // toast.error('Failed to load messes');
     } finally {
       setLoadingMesses(false);
     }
@@ -51,10 +51,10 @@ const Register = () => {
     e.preventDefault();
 
     // Validation
-    if (!formData.mess_id) {
-      toast.error('Please select a mess');
-      return;
-    }
+    // if (!formData.mess_id) {
+    //   toast.error('Please select a mess');
+    //   return;
+    // }
 
     if (formData.password !== formData.confirm_password) {
       toast.error('Passwords do not match');
@@ -180,17 +180,17 @@ const Register = () => {
                   value={formData.mess_id}
                   onChange={handleChange}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all appearance-none bg-white"
-                  required
+                  // required
                   disabled={loadingMesses}
                 >
                   <option value="">
                     {loadingMesses ? 'Loading messes...' : 'Choose your mess location'}
                   </option>
-                  {messes.map((mess) => (
+                  {/* {messes.map((mess) => (
                     <option key={mess.mess_id} value={mess.mess_id}>
                       {mess.name} - {mess.city}, {mess.state}
                     </option>
-                  ))}
+                  ))} */}
                 </select>
               </div>
               {formData.mess_id && (
@@ -248,7 +248,7 @@ const Register = () => {
                   onChange={handleChange}
                   className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   placeholder="Confirm your password"
-                  required
+                  // required
                 />
                 <button
                   type="button"

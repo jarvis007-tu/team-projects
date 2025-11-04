@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { FiUser, FiMail, FiPhone, FiLock, FiEye, FiEyeOff, FiMapPin } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import authService from '../../services/authService';
-import apiClient from '../../services/apiClient';
+// import apiClient from '../../services/apiClient';
 
 const Register = () => {
   const navigate = useNavigate();

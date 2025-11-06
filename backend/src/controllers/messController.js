@@ -362,7 +362,7 @@ class MessController {
       const messes = await Mess.find({
         status: 'active',
         deleted_at: null
-      }).select('name code city state latitude longitude')
+      }).select('name code address city state latitude longitude')
         .sort({ name: 1 });
 
       res.json({

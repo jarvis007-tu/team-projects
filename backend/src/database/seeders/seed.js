@@ -279,7 +279,7 @@ async function seed() {
       user_id: null, // Broadcast notification
       title: 'System Maintenance',
       message: 'The system will undergo maintenance on Sunday from 2 AM to 4 AM. Please plan accordingly.',
-      type: 'system',
+      type: 'alert',
       priority: 'high',
       is_read: false,
       metadata: { maintenance_type: 'scheduled' },

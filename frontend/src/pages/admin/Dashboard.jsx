@@ -53,7 +53,7 @@ const Dashboard = () => {
       
       // Fetch real data from API
       const [statsRes, activityRes, attendanceRes, subscriptionRes] = await Promise.all([
-        dashboardService.getDashboardStats(),
+        dashboardService.getStats(),
         dashboardService.getRecentActivity(),
         dashboardService.getAttendanceStats(),
         dashboardService.getSubscriptionStats()

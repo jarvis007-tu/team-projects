@@ -6,10 +6,14 @@ const menuExtensions = {
   // Get all menu items
   async getMenuItems(req, res) {
     try {
-      const { category, search, page = 1, limit = 10 } = req.query;
+      const { category, search, page = 1, limit = 100 } = req.query;
       const skip = (page - 1) * limit;
 
-      const whereConditions = { is_active: true };
+      const whereConditions = { is_active: true, deleted_at: null };
+
+      if (category) {
+        whereConditions.meal_type = category;
+      }
 
       if (search) {
         whereConditions.items = {
@@ -22,26 +26,39 @@ const menuExtensions = {
       const menuItems = await WeeklyMenu.find(whereConditions)
         .limit(parseInt(limit))
         .skip(parseInt(skip))
-        .sort({ day: 1, meal_type: 1 });
+        .sort({ day: 1, meal_type: 1 })
+        .lean();
 
       // Transform the data to match frontend expectations
-      const transformedItems = menuItems.map(item => ({
-        id: item.menu_id,
-        name: item.meal_type + ' - ' + item.day,
-        items: JSON.parse(item.items || '[]'),
-        category: item.meal_type,
-        day: item.day,
-        special_note: item.special_note,
-        is_available: item.is_active,
-        nutrition: {
-          calories: item.calories || 0,
-          protein: item.protein || 0,
-          carbs: item.carbs || 0,
-          fat: item.fat || 0
-        },
-        created_at: item.createdAt,
-        updated_at: item.updatedAt
-      }));
+      const transformedItems = menuItems.map(item => {
+        // items is already an array in the model, no need to parse
+        const itemsArray = Array.isArray(item.items) ? item.items : [];
+
+        return {
+          item_id: item._id.toString(),
+          name: `${item.meal_type.charAt(0).toUpperCase() + item.meal_type.slice(1)} - ${item.day.charAt(0).toUpperCase() + item.day.slice(1)}`,
+          description: itemsArray.join(', '),
+          items: itemsArray,
+          category: item.meal_type,
+          day: item.day,
+          special_note: item.notes || '',
+          is_available: item.is_active,
+          is_vegetarian: item.is_veg || false,
+          is_vegan: false,
+          price: item.price || 0,
+          nutritional_info: item.nutritional_info || {
+            calories: 0,
+            protein: 0,
+            carbs: 0,
+            fat: 0,
+            fiber: 0
+          },
+          allergens: item.allergen_info || [],
+          image_url: null,
+          created_at: item.createdAt,
+          updated_at: item.updatedAt
+        };
+      });
 
       res.json({
         success: true,
@@ -56,7 +73,8 @@ const menuExtensions = {
       logger.error('Error fetching menu items:', error);
       res.status(500).json({
         success: false,
-        message: 'Failed to fetch menu items'
+        message: 'Failed to fetch menu items',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   },

@@ -19,7 +19,12 @@ const AdminDashboard = () => {
       totalUsers: 0,
       activeSubscriptions: 0,
       todayAttendance: 0,
-      monthlyRevenue: 0
+      monthlyRevenue: 0,
+      subscriptionsByType: {
+        veg: 0,
+        'non-veg': 0,
+        both: 0
+      }
     },
     charts: {
       attendanceTrend: [],
@@ -38,9 +43,28 @@ const AdminDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       const response = await reportService.getDashboardStats();
-      setDashboardData(response.data);
+      const data = response.data;
+
+      // Transform API response to match our state structure
+      setDashboardData({
+        stats: {
+          totalUsers: data.users?.total || 0,
+          activeSubscriptions: data.subscriptions?.active || 0,
+          todayAttendance: data.attendance?.today?.reduce((sum, meal) => sum + meal.count, 0) || 0,
+          monthlyRevenue: data.subscriptions?.monthlyRevenue || 0,
+          subscriptionsByType: data.subscriptions?.byType || { veg: 0, 'non-veg': 0, both: 0 }
+        },
+        charts: {
+          attendanceTrend: data.attendance?.monthlyTrend || [],
+          subscriptionDistribution: [],
+          revenueChart: []
+        },
+        recentActivity: [],
+        topUsers: []
+      });
     } catch (error) {
       toast.error('Failed to load dashboard data');
+      console.error('Dashboard data fetch error:', error);
     } finally {
       setLoading(false);
     }
@@ -246,6 +270,62 @@ const AdminDashboard = () => {
               </div>
             ))}
           </div>
+
+          {/* Subscription Type Stats */}
+          {dashboardData.stats.subscriptionsByType && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-8">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Food Preference Distribution</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-green-50 dark:bg-green-900 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-green-600 dark:text-green-400 text-sm font-medium">Vegetarian</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                        {dashboardData.stats.subscriptionsByType.veg || 0}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center">
+                      <span className="text-2xl">🥗</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-red-50 dark:bg-red-900 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-red-600 dark:text-red-400 text-sm font-medium">Non-Vegetarian</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                        {dashboardData.stats.subscriptionsByType['non-veg'] || 0}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-red-100 dark:bg-red-800 rounded-full flex items-center justify-center">
+                      <span className="text-2xl">🍗</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-blue-50 dark:bg-blue-900 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-blue-600 dark:text-blue-400 text-sm font-medium">Both</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                        {dashboardData.stats.subscriptionsByType.both || 0}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-800 rounded-full flex items-center justify-center">
+                      <span className="text-2xl">🍽️</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  <strong>Total Active Subscribers:</strong> {(dashboardData.stats.subscriptionsByType.veg || 0) + (dashboardData.stats.subscriptionsByType['non-veg'] || 0) + (dashboardData.stats.subscriptionsByType.both || 0)}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  This helps you plan meals according to food preferences
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

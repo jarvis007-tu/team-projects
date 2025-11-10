@@ -7,18 +7,24 @@ class DashboardController {
     try {
       const today = moment().startOf('day');
       const thisMonth = moment().startOf('month');
-      
+      const messId = req.messContext?.messId;
+
+      // Build query filter based on mess context
+      const messFilter = messId ? { mess_id: messId } : {};
+
       // Get user statistics
-      const totalUsers = await User.countDocuments();
-      const activeUsers = await User.countDocuments({ status: 'active' });
+      const totalUsers = await User.countDocuments(messFilter);
+      const activeUsers = await User.countDocuments({ ...messFilter, status: 'active' });
 
       // Get subscription statistics
       const activeSubscriptions = await Subscription.countDocuments({
+        ...messFilter,
         status: 'active',
         end_date: { $gte: today.toDate() }
       });
 
       const expiringSoon = await Subscription.countDocuments({
+        ...messFilter,
         status: 'active',
         end_date: {
           $gte: today.toDate(),
@@ -26,8 +32,38 @@ class DashboardController {
         }
       });
 
+      // Get subscription type counts (NEW FEATURE)
+      const subTypeStats = await Subscription.aggregate([
+        {
+          $match: {
+            ...messFilter,
+            status: 'active',
+            end_date: { $gte: today.toDate() }
+          }
+        },
+        {
+          $group: {
+            _id: '$sub_type',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+
+      // Format subscription type counts
+      const subTypeCounts = {
+        veg: 0,
+        'non-veg': 0,
+        both: 0
+      };
+      subTypeStats.forEach(stat => {
+        if (stat._id) {
+          subTypeCounts[stat._id] = stat.count;
+        }
+      });
+
       // Get today's attendance
       const todayAttendance = await Attendance.countDocuments({
+        ...messFilter,
         scan_time: {
           $gte: today.toDate(),
           $lte: moment().endOf('day').toDate()
@@ -38,6 +74,7 @@ class DashboardController {
       const revenueResult = await Subscription.aggregate([
         {
           $match: {
+            ...messFilter,
             status: 'active',
             end_date: { $gte: today.toDate() }
           }
@@ -51,7 +88,7 @@ class DashboardController {
       ]);
 
       const monthlyRevenue = revenueResult[0]?.total || 0;
-      
+
       res.json({
         success: true,
         data: {
@@ -64,13 +101,16 @@ class DashboardController {
             active: activeSubscriptions,
             expiringSoon: expiringSoon,
             expired: await Subscription.countDocuments({
+              ...messFilter,
               status: 'expired',
               end_date: { $lt: today.toDate() }
-            })
+            }),
+            byType: subTypeCounts // NEW: Subscription type breakdown
           },
           attendance: {
             today: todayAttendance,
             weekly: await Attendance.countDocuments({
+              ...messFilter,
               scan_time: {
                 $gte: moment().startOf('week').toDate(),
                 $lte: moment().endOf('week').toDate()

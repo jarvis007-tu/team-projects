@@ -24,6 +24,7 @@ const validateRegister = (req, res, next) => {
     phone: Joi.string().pattern(/^[0-9]{10}$/).required(),
     password: Joi.string().min(6).required(),
     confirm_password: Joi.string().valid(Joi.ref('password')).required(),
+    mess_id: Joi.string().required(),
     role: Joi.string().valid('admin', 'subscriber').optional()
   });
 

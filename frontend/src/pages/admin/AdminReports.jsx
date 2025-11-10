@@ -103,7 +103,8 @@ const AdminReports = () => {
           response = await reportService.getAttendanceAnalytics(params);
           break;
         case 'user-activity':
-          response = await reportService.getUserActivityReport(params);
+          // User activity report requires user_id, use trends instead for overview
+          response = await reportService.getTrendsAnalysis({ ...params, metric: 'attendance' });
           break;
         case 'meal-consumption':
           response = await reportService.getMealConsumptionReport(params);

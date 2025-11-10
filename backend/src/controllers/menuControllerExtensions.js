@@ -105,12 +105,23 @@ const menuExtensions = {
       const weekEnd = moment().endOf('week');
 
       // User's mess_id or provided mess_id
-      const targetMessId = mess_id || req.user.mess_id;
+      const targetMessId = mess_id || req.user?.mess_id;
 
       if (!targetMessId) {
         return res.status(400).json({
           success: false,
           message: 'Mess ID is required'
+        });
+      }
+
+      // Get user ID - the User model's toJSON() renames _id to user_id
+      const userId = req.user?.user_id || req.user?._id || req.user?.id;
+
+      if (!userId) {
+        logger.error('User ID not found in req.user:', JSON.stringify(req.user));
+        return res.status(400).json({
+          success: false,
+          message: 'User authentication required - user ID not found'
         });
       }
 
@@ -126,7 +137,7 @@ const menuExtensions = {
         items: itemsArray,
         notes: special_note || description || '',
         is_active: true,
-        created_by: req.user._id || req.user.id,
+        created_by: userId,
         nutritional_info: {
           calories: nutritionData.calories || 0,
           protein: nutritionData.protein || 0,

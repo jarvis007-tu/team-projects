@@ -27,9 +27,38 @@ const WeeklyMenu = () => {
     setLoading(true);
     try {
       const response = await menuService.getWeeklyMenu();
-      setWeeklyMenu(response.data.menu);
+      // Backend returns grouped menu by day: { monday: { breakfast: {...}, lunch: {...} }, tuesday: ... }
+      const groupedData = response.data || response;
+
+      // Convert to array format expected by the component
+      const menuArray = [];
+      const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+      days.forEach(day => {
+        if (groupedData[day]) {
+          const dayMenu = {
+            day: day.charAt(0).toUpperCase() + day.slice(1),
+            breakfast: groupedData[day].breakfast || null,
+            lunch: groupedData[day].lunch || null,
+            dinner: groupedData[day].dinner || null
+          };
+          menuArray.push(dayMenu);
+        } else {
+          // Add empty day if no menu
+          menuArray.push({
+            day: day.charAt(0).toUpperCase() + day.slice(1),
+            breakfast: null,
+            lunch: null,
+            dinner: null
+          });
+        }
+      });
+
+      setWeeklyMenu(menuArray);
     } catch (error) {
+      console.error('Error fetching weekly menu:', error);
       toast.error('Failed to fetch weekly menu');
+      setWeeklyMenu([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -72,7 +101,7 @@ const WeeklyMenu = () => {
         </div>
 
         {/* Today's Special */}
-        {todayMenu && currentMeal && (
+        {todayMenu && currentMeal && todayMenu[currentMeal] && (
           <div className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl shadow-lg p-6 mb-8 text-white">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold flex items-center">
@@ -95,10 +124,10 @@ const WeeklyMenu = () => {
                   ))}
                 </ul>
               </div>
-              {todayMenu[currentMeal]?.special && (
+              {todayMenu[currentMeal]?.special_note && (
                 <div>
                   <h3 className="font-semibold mb-2">Chef's Special</h3>
-                  <p className="text-white/90">{todayMenu[currentMeal].special}</p>
+                  <p className="text-white/90">{todayMenu[currentMeal].special_note}</p>
                 </div>
               )}
             </div>
@@ -181,13 +210,13 @@ const WeeklyMenu = () => {
                           ))}
                         </div>
 
-                        {mealItems.special && (
+                        {mealItems.special_note && (
                           <div className="pt-3 border-t">
                             <div className="flex items-start">
                               <FiStar className="w-4 h-4 text-yellow-500 mr-2 mt-0.5 flex-shrink-0" />
                               <div>
-                                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Special</p>
-                                <p className="text-sm text-gray-700 dark:text-gray-300">{mealItems.special}</p>
+                                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Special Note</p>
+                                <p className="text-sm text-gray-700 dark:text-gray-300">{mealItems.special_note}</p>
                               </div>
                             </div>
                           </div>

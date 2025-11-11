@@ -16,6 +16,7 @@
     "format": "prettier --write src/**/*.js",
     "db:seed": "node src/database/seeders/seed.js",
     "db:seed:production": "node src/database/seeders/seed-production.js",
+    "db:seed:menu": "node scripts/seedMenu.js",
     "db:drop": "node src/database/seeders/drop.js",
     "db:verify": "node src/database/seeders/verify-setup.js"
   },

@@ -3,7 +3,12 @@ import api from './api.js';
 const menuService = {
   // Get weekly menu
   getWeeklyMenu: async (startDate) => {
-    return api.get('/menu/weekly', { params: { start_date: startDate } });
+    return api.get('/menu/weekly', { params: { week_start_date: startDate } });
+  },
+
+  // Get today's menu
+  getTodayMenu: () => {
+    return api.get('/menu/today');
   },
 
   // Get menu items

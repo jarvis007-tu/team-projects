@@ -190,8 +190,9 @@ async function seed() {
     // Create weekly menu for current week
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const mealTypes = ['breakfast', 'lunch', 'dinner'];
-    const weekStart = moment().startOf('week').toDate();
-    const weekEnd = moment().endOf('week').toDate();
+    // Set week to start on Monday (day 1) instead of Sunday (day 0)
+    const weekStart = moment().startOf('week').add(1, 'day').toDate(); // Monday
+    const weekEnd = moment(weekStart).add(6, 'days').toDate(); // Sunday
 
     const menuItems = {
       breakfast: [

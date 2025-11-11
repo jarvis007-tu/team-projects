@@ -27,20 +27,12 @@ class MenuController {
           acc[item.day] = {};
         }
 
-        // Handle both string and already parsed items
-        let items = item.items;
-        if (typeof items === 'string') {
-          try {
-            items = JSON.parse(items);
-          } catch (e) {
-            logger.error('Error parsing menu items:', e);
-            items = [];
-          }
-        }
+        // items is already an array from the model
+        const itemsArray = Array.isArray(item.items) ? item.items : [];
 
         acc[item.day][item.meal_type] = {
-          items: items,
-          special_note: item.special_note
+          items: itemsArray,
+          special_note: item.notes || item.special_note || ''
         };
         return acc;
       }, {});
@@ -78,20 +70,12 @@ class MenuController {
         .sort({ meal_type: 1 });
 
       const todayMenu = menu.reduce((acc, item) => {
-        // Handle both string and already parsed items
-        let items = item.items;
-        if (typeof items === 'string') {
-          try {
-            items = JSON.parse(items);
-          } catch (e) {
-            logger.error('Error parsing menu items:', e);
-            items = [];
-          }
-        }
+        // items is already an array from the model
+        const itemsArray = Array.isArray(item.items) ? item.items : [];
 
         acc[item.meal_type] = {
-          items: items,
-          special_note: item.special_note
+          items: itemsArray,
+          special_note: item.notes || item.special_note || ''
         };
         return acc;
       }, {});
@@ -142,23 +126,27 @@ class MenuController {
           });
         }
 
-        // Update existing
-        menuItem.items = JSON.stringify(items);
-        menuItem.special_note = special_note;
+        // Update existing - items should be array, not JSON string
+        menuItem.items = Array.isArray(items) ? items : (typeof items === 'string' ? JSON.parse(items) : []);
+        menuItem.notes = special_note;
         menuItem.week_start_date = week_start_date;
-        menuItem.created_by = req.user.id;
+        menuItem.week_end_date = moment(week_start_date).add(6, 'days').toDate();
+        menuItem.created_by = req.user._id || req.user.id;
         await menuItem.save();
       } else {
-        // Create new
+        // Create new - items should be array, not JSON string
+        const itemsArray = Array.isArray(items) ? items : (typeof items === 'string' ? JSON.parse(items) : []);
+
         menuItem = await WeeklyMenu.create({
-          day,
-          meal_type,
-          items: JSON.stringify(items),
-          special_note,
+          day: day.toLowerCase(),
+          meal_type: meal_type.toLowerCase(),
+          items: itemsArray,
+          notes: special_note,
           week_start_date,
+          week_end_date: moment(week_start_date).add(6, 'days').toDate(),
           mess_id: targetMessId,
           is_active: true,
-          created_by: req.user.id
+          created_by: req.user._id || req.user.id
         });
       }
 
@@ -210,15 +198,21 @@ class MenuController {
       for (const day of days) {
         const meals = Object.keys(menu[day]);
         for (const meal_type of meals) {
+          const mealData = menu[day][meal_type];
+          // items should be an array, not JSON string
+          const itemsArray = Array.isArray(mealData.items) ? mealData.items :
+                            (typeof mealData.items === 'string' ? JSON.parse(mealData.items) : []);
+
           menuItems.push({
-            day,
-            meal_type,
-            items: JSON.stringify(menu[day][meal_type].items),
-            special_note: menu[day][meal_type].special_note,
+            day: day.toLowerCase(),
+            meal_type: meal_type.toLowerCase(),
+            items: itemsArray,
+            notes: mealData.special_note || mealData.notes || '',
             week_start_date,
+            week_end_date: moment(week_start_date).add(6, 'days').toDate(),
             mess_id: targetMessId,
             is_active: true,
-            created_by: req.user.id
+            created_by: req.user._id || req.user.id
           });
         }
       }

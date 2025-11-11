@@ -515,11 +515,13 @@ const menuExtensions = {
         }
       });
 
-      // Mock CSV export
+      // CSV export - items is an array, join with semicolon for CSV
       const csv = 'Day,Meal Type,Items,Special Note\n' +
-        menuItems.map(item =>
-          `${item.day},${item.meal_type},"${item.items}","${item.special_note || ''}"`
-        ).join('\n');
+        menuItems.map(item => {
+          const itemsString = Array.isArray(item.items) ? item.items.join('; ') : '';
+          const notes = item.notes || item.special_note || '';
+          return `${item.day},${item.meal_type},"${itemsString}","${notes}"`;
+        }).join('\n');
 
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="menu-export.csv"');
@@ -570,9 +572,12 @@ const menuExtensions = {
         if (!acc[item.day]) {
           acc[item.day] = {};
         }
+        // items is already an array from the model
+        const itemsArray = Array.isArray(item.items) ? item.items : [];
+
         acc[item.day][item.meal_type] = {
-          items: JSON.parse(item.items || '[]'),
-          special_note: item.special_note
+          items: itemsArray,
+          special_note: item.notes || item.special_note || ''
         };
         return acc;
       }, {});

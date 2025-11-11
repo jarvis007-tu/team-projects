@@ -255,6 +255,7 @@ class MealConfirmationController {
 
     try {
       const userId = req.user.id;
+      const userMessId = req.user.mess_id;
       const { start_date, end_date, meal_types } = req.body;
 
       // Validate dates
@@ -308,6 +309,7 @@ class MealConfirmationController {
           if (!existing) {
             confirmations.push({
               user_id: userId,
+              mess_id: userMessId,
               meal_date: date,
               meal_type,
               status: 'confirmed',
@@ -323,6 +325,8 @@ class MealConfirmationController {
 
       await session.commitTransaction();
       session.endSession();
+
+      logger.info(`Bulk meal confirmations created: ${confirmations.length} for user ${userId} in mess ${userMessId}`);
 
       res.json({
         success: true,
@@ -342,7 +346,7 @@ class MealConfirmationController {
   // Get confirmation statistics
   async getConfirmationStats(req, res) {
     try {
-      const { start_date, end_date } = req.query;
+      const { start_date, end_date, mess_id } = req.query;
 
       const queryConditions = {};
       if (start_date && end_date) {
@@ -356,6 +360,17 @@ class MealConfirmationController {
           $gte: moment().startOf('week').format('YYYY-MM-DD'),
           $lte: moment().endOf('week').format('YYYY-MM-DD')
         };
+      }
+
+      // Add mess filtering based on user role
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all messes or filter by specific mess
+        if (mess_id) {
+          queryConditions.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin and subscribers can only view their own mess stats
+        queryConditions.mess_id = req.user.mess_id;
       }
 
       // Get stats by meal type

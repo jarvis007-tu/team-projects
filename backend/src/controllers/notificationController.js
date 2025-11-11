@@ -110,8 +110,33 @@ class NotificationController {
   // Create notification
   async createNotification(req, res) {
     try {
-      const { title, message, type = 'announcement', user_id, priority = 'medium' } = req.body;
+      const { title, message, type = 'announcement', user_id, priority = 'medium', mess_id } = req.body;
       const createdBy = req.user.user_id;
+
+      // Determine mess_id: super_admin can specify, mess_admin uses their own
+      const targetMessId = req.user.role === 'super_admin'
+        ? (mess_id || req.user.mess_id)
+        : req.user.mess_id;
+
+      // If user_id specified, verify the user belongs to the admin's mess
+      if (user_id) {
+        const user = await User.findById(user_id);
+        if (!user) {
+          return res.status(404).json({
+            success: false,
+            message: 'Recipient user not found'
+          });
+        }
+
+        // Mess boundary check for mess_admin
+        if (req.user.role === 'mess_admin' &&
+            user.mess_id.toString() !== req.user.mess_id.toString()) {
+          return res.status(403).json({
+            success: false,
+            message: 'You can only send notifications to users in your own mess'
+          });
+        }
+      }
 
       // Create notification
       const notification = await Notification.create({
@@ -119,6 +144,7 @@ class NotificationController {
         message,
         type,
         user_id,
+        mess_id: targetMessId,
         priority,
         created_by: createdBy
       });
@@ -137,11 +163,17 @@ class NotificationController {
           });
         }
       } else {
-        // Broadcast to all users with device tokens
-        const users = await User.find({
+        // Broadcast to users in the target mess only
+        const userQuery = {
           device_token: { $ne: null },
           status: 'active'
-        });
+        };
+
+        if (targetMessId) {
+          userQuery.mess_id = targetMessId;
+        }
+
+        const users = await User.find(userQuery);
 
         const deviceTokens = users.map(u => u.device_token);
         if (deviceTokens.length > 0) {
@@ -155,6 +187,8 @@ class NotificationController {
           });
         }
       }
+
+      logger.info(`Notification created by ${req.user.role}: ${req.user.user_id} for mess ${targetMessId}`);
 
       res.status(201).json({
         success: true,
@@ -245,7 +279,8 @@ class NotificationController {
     try {
       const { id } = req.params;
 
-      const notification = await Notification.findByIdAndDelete(id);
+      // Find notification first for permission checks
+      const notification = await Notification.findById(id);
 
       if (!notification) {
         return res.status(404).json({
@@ -253,6 +288,20 @@ class NotificationController {
           message: 'Notification not found'
         });
       }
+
+      // Mess boundary check - mess_admin can only delete notifications from their own mess
+      if (req.user.role === 'mess_admin' &&
+          notification.mess_id &&
+          notification.mess_id.toString() !== req.user.mess_id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only delete notifications from your own mess'
+        });
+      }
+
+      await Notification.findByIdAndDelete(id);
+
+      logger.info(`Notification deleted by ${req.user.role}: ${req.user.user_id}`);
 
       res.json({
         success: true,
@@ -270,13 +319,25 @@ class NotificationController {
   // Send bulk notifications
   async sendBulkNotifications(req, res) {
     try {
-      const { title, message, type = 'announcement', priority = 'medium', recipient_criteria } = req.body;
+      const { title, message, type = 'announcement', priority = 'medium', recipient_criteria, mess_id } = req.body;
       const createdBy = req.user.user_id;
+
+      // Determine mess_id: super_admin can specify, mess_admin uses their own
+      const targetMessId = req.user.role === 'super_admin'
+        ? (mess_id || req.user.mess_id)
+        : req.user.mess_id;
 
       let recipients = [];
 
       if (recipient_criteria) {
         const queryConditions = {};
+
+        // Add mess filtering - CRITICAL: Filter recipients by mess
+        if (req.user.role === 'mess_admin') {
+          queryConditions.mess_id = req.user.mess_id;
+        } else if (targetMessId) {
+          queryConditions.mess_id = targetMessId;
+        }
 
         if (recipient_criteria.role) {
           queryConditions.role = recipient_criteria.role;
@@ -287,16 +348,23 @@ class NotificationController {
           const Subscription = require('../models/Subscription');
           const today = moment().format('YYYY-MM-DD');
 
-          const activeSubscriptions = await Subscription.find({
+          const subscriptionQuery = {
             status: 'active',
             start_date: { $lte: today },
             end_date: { $gte: today }
-          }).distinct('user_id');
+          };
+
+          // Add mess filtering to subscription query
+          if (queryConditions.mess_id) {
+            subscriptionQuery.mess_id = queryConditions.mess_id;
+          }
+
+          const activeSubscriptions = await Subscription.find(subscriptionQuery).distinct('user_id');
 
           queryConditions._id = { $in: activeSubscriptions };
         }
 
-        recipients = await User.find(queryConditions).select('_id device_token');
+        recipients = await User.find(queryConditions).select('_id device_token mess_id');
       }
 
       // Create notifications
@@ -310,17 +378,19 @@ class NotificationController {
             message,
             type,
             user_id: recipient._id,
+            mess_id: recipient.mess_id || targetMessId,
             priority,
             created_by: createdBy
           });
         }
       } else {
-        // Create broadcast notification
+        // Create broadcast notification for target mess
         notifications.push({
           title,
           message,
           type,
           user_id: null,
+          mess_id: targetMessId,
           priority,
           created_by: createdBy
         });
@@ -341,6 +411,8 @@ class NotificationController {
         });
       }
 
+      logger.info(`Bulk notifications sent by ${req.user.role}: ${req.user.user_id} to ${recipients.length || 'all'} users in mess ${targetMessId}`);
+
       res.json({
         success: true,
         message: `Bulk notifications sent to ${recipients.length || 'all'} users`
@@ -357,14 +429,31 @@ class NotificationController {
   // Get notification statistics
   async getNotificationStats(req, res) {
     try {
+      const { mess_id } = req.query;
+
+      // Build match stage for mess filtering
+      const matchStage = {};
+
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          matchStage.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess stats
+        matchStage.mess_id = req.user.mess_id;
+      }
+
       const [totalSent, totalRead, byType, byPriority] = await Promise.all([
-        Notification.countDocuments(),
-        Notification.countDocuments({ is_read: true }),
+        Notification.countDocuments(matchStage),
+        Notification.countDocuments({ ...matchStage, is_read: true }),
         Notification.aggregate([
+          { $match: matchStage },
           { $group: { _id: '$type', count: { $sum: 1 } } },
           { $project: { type: '$_id', count: 1, _id: 0 } }
         ]),
         Notification.aggregate([
+          { $match: matchStage },
           { $group: { _id: '$priority', count: { $sum: 1 } } },
           { $project: { priority: '$_id', count: 1, _id: 0 } }
         ])

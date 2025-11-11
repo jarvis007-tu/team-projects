@@ -117,16 +117,31 @@ class MenuController {
   // Create or update menu item
   async upsertMenuItem(req, res) {
     try {
-      const { day, meal_type, items, special_note, week_start_date } = req.body;
+      const { day, meal_type, items, special_note, week_start_date, mess_id } = req.body;
 
-      // Check if menu item exists
+      // Determine mess_id: super_admin can specify, mess_admin uses their own
+      const targetMessId = req.user.role === 'super_admin'
+        ? (mess_id || req.user.mess_id)
+        : req.user.mess_id;
+
+      // Check if menu item exists for this mess
       let menuItem = await WeeklyMenu.findOne({
         day,
         meal_type,
+        mess_id: targetMessId,
         is_active: true
       });
 
       if (menuItem) {
+        // Mess boundary check for updates
+        if (req.user.role === 'mess_admin' &&
+            menuItem.mess_id.toString() !== req.user.mess_id.toString()) {
+          return res.status(403).json({
+            success: false,
+            message: 'You can only manage menus for your own mess'
+          });
+        }
+
         // Update existing
         menuItem.items = JSON.stringify(items);
         menuItem.special_note = special_note;
@@ -141,10 +156,13 @@ class MenuController {
           items: JSON.stringify(items),
           special_note,
           week_start_date,
+          mess_id: targetMessId,
           is_active: true,
           created_by: req.user.id
         });
       }
+
+      logger.info(`Menu item upserted by ${req.user.role}: ${req.user.user_id} for mess ${targetMessId}`);
 
       res.json({
         success: true,
@@ -163,11 +181,25 @@ class MenuController {
   // Update entire weekly menu
   async updateWeeklyMenu(req, res) {
     try {
-      const { menu, week_start_date } = req.body;
+      const { menu, week_start_date, mess_id } = req.body;
 
-      // Deactivate old menu
+      // Determine mess_id: super_admin can specify, mess_admin uses their own
+      const targetMessId = req.user.role === 'super_admin'
+        ? (mess_id || req.user.mess_id)
+        : req.user.mess_id;
+
+      // Build filter for deactivation - CRITICAL: Filter by mess_id to avoid affecting other messes
+      const deactivateFilter = { is_active: true };
+      if (req.user.role !== 'super_admin') {
+        deactivateFilter.mess_id = targetMessId;
+      } else if (mess_id) {
+        // If super_admin specified a mess, only deactivate that mess's menu
+        deactivateFilter.mess_id = mess_id;
+      }
+
+      // Deactivate old menu for the target mess only
       await WeeklyMenu.updateMany(
-        { is_active: true },
+        deactivateFilter,
         { is_active: false }
       );
 
@@ -184,6 +216,7 @@ class MenuController {
             items: JSON.stringify(menu[day][meal_type].items),
             special_note: menu[day][meal_type].special_note,
             week_start_date,
+            mess_id: targetMessId,
             is_active: true,
             created_by: req.user.id
           });
@@ -191,6 +224,8 @@ class MenuController {
       }
 
       await WeeklyMenu.insertMany(menuItems);
+
+      logger.info(`Weekly menu updated by ${req.user.role}: ${req.user.user_id} for mess ${targetMessId}`);
 
       res.json({
         success: true,
@@ -210,7 +245,8 @@ class MenuController {
     try {
       const { id } = req.params;
 
-      const menuItem = await WeeklyMenu.findByIdAndDelete(id);
+      // Find menu item first for permission checks
+      const menuItem = await WeeklyMenu.findById(id);
 
       if (!menuItem) {
         return res.status(404).json({
@@ -218,6 +254,19 @@ class MenuController {
           message: 'Menu item not found'
         });
       }
+
+      // Mess boundary check - mess_admin can only delete their own mess menu items
+      if (req.user.role === 'mess_admin' &&
+          menuItem.mess_id.toString() !== req.user.mess_id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only manage menus for your own mess'
+        });
+      }
+
+      await WeeklyMenu.findByIdAndDelete(id);
+
+      logger.info(`Menu item deleted by ${req.user.role}: ${req.user.user_id} for mess ${menuItem.mess_id}`);
 
       res.json({
         success: true,
@@ -235,18 +284,33 @@ class MenuController {
   // Get menu history
   async getMenuHistory(req, res) {
     try {
-      const { page = 1, limit = 10 } = req.query;
+      const { page = 1, limit = 10, mess_id } = req.query;
       const skip = (page - 1) * limit;
+
+      // Build match stage for mess filtering
+      const matchStage = {};
+
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          matchStage.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess history
+        matchStage.mess_id = req.user.mess_id;
+      }
 
       const [history, count] = await Promise.all([
         WeeklyMenu.aggregate([
-          { $group: { _id: { week_start_date: '$week_start_date', is_active: '$is_active' } } },
+          { $match: matchStage },
+          { $group: { _id: { week_start_date: '$week_start_date', is_active: '$is_active', mess_id: '$mess_id' } } },
           { $sort: { '_id.week_start_date': -1 } },
           { $skip: skip },
           { $limit: parseInt(limit) }
         ]),
         WeeklyMenu.aggregate([
-          { $group: { _id: { week_start_date: '$week_start_date', is_active: '$is_active' } } },
+          { $match: matchStage },
+          { $group: { _id: { week_start_date: '$week_start_date', is_active: '$is_active', mess_id: '$mess_id' } } },
           { $count: 'total' }
         ])
       ]);
@@ -274,19 +338,56 @@ class MenuController {
   // Activate menu version
   async activateMenuVersion(req, res) {
     try {
-      const { week_start_date } = req.body;
+      const { week_start_date, mess_id } = req.body;
 
-      // Deactivate all menus
+      // Determine mess_id: super_admin can specify, mess_admin uses their own
+      const targetMessId = req.user.role === 'super_admin'
+        ? (mess_id || req.user.mess_id)
+        : req.user.mess_id;
+
+      // Build filter for deactivation - only affect target mess
+      const deactivateFilter = { is_active: true };
+      if (targetMessId) {
+        deactivateFilter.mess_id = targetMessId;
+      }
+
+      // Build filter for activation - only activate target mess's version
+      const activateFilter = { week_start_date };
+      if (targetMessId) {
+        activateFilter.mess_id = targetMessId;
+      }
+
+      // Verify the version exists before activating
+      const versionExists = await WeeklyMenu.findOne(activateFilter);
+      if (!versionExists) {
+        return res.status(404).json({
+          success: false,
+          message: 'Menu version not found for this mess'
+        });
+      }
+
+      // Mess boundary check for mess_admin
+      if (req.user.role === 'mess_admin' &&
+          versionExists.mess_id.toString() !== req.user.mess_id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only activate menu versions for your own mess'
+        });
+      }
+
+      // Deactivate all menus for this mess
       await WeeklyMenu.updateMany(
-        { is_active: true },
+        deactivateFilter,
         { is_active: false }
       );
 
-      // Activate specified version
+      // Activate specified version for this mess
       await WeeklyMenu.updateMany(
-        { week_start_date },
+        activateFilter,
         { is_active: true }
       );
+
+      logger.info(`Menu version activated by ${req.user.role}: ${req.user.user_id} for mess ${targetMessId}`);
 
       res.json({
         success: true,

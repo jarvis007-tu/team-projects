@@ -134,16 +134,28 @@ class DashboardController {
 
   async getRecentActivity(req, res) {
     try {
-      const { limit = 10 } = req.query;
-      
+      const { limit = 10, mess_id } = req.query;
+
+      // Build mess filter
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
+
       // Get recent attendance logs
-      const recentAttendance = await Attendance.find()
+      const recentAttendance = await Attendance.find(messFilter)
         .limit(parseInt(limit))
         .sort({ scan_time: -1 })
         .populate('user_id', 'full_name email');
 
       // Get recent subscriptions
-      const recentSubscriptions = await Subscription.find()
+      const recentSubscriptions = await Subscription.find(messFilter)
         .limit(parseInt(limit))
         .sort({ createdAt: -1 })
         .populate('user_id', 'full_name email');
@@ -187,9 +199,9 @@ class DashboardController {
 
   async getAttendanceStats(req, res) {
     try {
-      const { period = 'week' } = req.query;
+      const { period = 'week', mess_id } = req.query;
       let startDate, endDate;
-      
+
       switch (period) {
         case 'day':
           startDate = moment().startOf('day');
@@ -207,11 +219,24 @@ class DashboardController {
           startDate = moment().startOf('week');
           endDate = moment().endOf('week');
       }
-      
+
+      // Build mess filter
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
+
       // Get attendance data using MongoDB aggregation
       const attendanceData = await Attendance.aggregate([
         {
           $match: {
+            ...messFilter,
             scan_time: {
               $gte: startDate.toDate(),
               $lte: endDate.toDate()
@@ -281,12 +306,25 @@ class DashboardController {
 
   async getSubscriptionStats(req, res) {
     try {
+      const { mess_id } = req.query;
       const now = moment();
-      
+
+      // Build mess filter
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
+
       // Get subscription statistics by plan using aggregation
       const planStats = await Subscription.aggregate([
         {
-          $match: { status: 'active' }
+          $match: { ...messFilter, status: 'active' }
         },
         {
           $group: {
@@ -302,8 +340,9 @@ class DashboardController {
       for (let i = 5; i >= 0; i--) {
         const monthStart = moment().subtract(i, 'months').startOf('month');
         const monthEnd = moment().subtract(i, 'months').endOf('month');
-        
+
         const count = await Subscription.countDocuments({
+          ...messFilter,
           createdAt: {
             $gte: monthStart.toDate(),
             $lte: monthEnd.toDate()
@@ -318,6 +357,7 @@ class DashboardController {
       
       // Get renewal rate
       const totalExpired = await Subscription.countDocuments({
+        ...messFilter,
         status: 'expired',
         end_date: {
           $gte: moment().subtract(30, 'days').toDate(),
@@ -326,6 +366,7 @@ class DashboardController {
       });
 
       const renewed = await Subscription.countDocuments({
+        ...messFilter,
         status: 'active',
         createdAt: {
           $gte: moment().subtract(30, 'days').toDate(),
@@ -342,7 +383,7 @@ class DashboardController {
           monthlyGrowth,
           renewalRate: parseFloat(renewalRate),
           summary: {
-            totalActive: await Subscription.countDocuments({ status: 'active' }),
+            totalActive: await Subscription.countDocuments({ ...messFilter, status: 'active' }),
             totalRevenue: planStats.reduce((sum, plan) => sum + (plan.revenue || 0), 0),
             averageSubscriptionValue: planStats.length > 0
               ? planStats.reduce((sum, plan) => sum + (plan.revenue || 0), 0) /
@@ -405,10 +446,24 @@ class DashboardController {
 
   async getTodayAttendance(req, res) {
     try {
+      const { mess_id } = req.query;
       const today = moment().startOf('day');
       const endOfToday = moment().endOf('day');
-      
+
+      // Build mess filter
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
+
       const attendance = await Attendance.find({
+        ...messFilter,
         scan_time: {
           $gte: today.toDate(),
           $lte: endOfToday.toDate()
@@ -442,14 +497,27 @@ class DashboardController {
 
   async getMealwiseAttendance(req, res) {
     try {
-      const { date } = req.query;
+      const { date, mess_id } = req.query;
       const targetDate = date ? moment(date) : moment();
       const startOfDay = targetDate.startOf('day');
       const endOfDay = targetDate.clone().endOf('day');
-      
+
+      // Build mess filter
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
+
       const attendance = await Attendance.aggregate([
         {
           $match: {
+            ...messFilter,
             scan_time: {
               $gte: startOfDay.toDate(),
               $lte: endOfDay.toDate()
@@ -493,11 +561,24 @@ class DashboardController {
 
   async getExpiringSubscriptions(req, res) {
     try {
-      const { days = 7 } = req.query;
+      const { days = 7, mess_id } = req.query;
       const today = moment().startOf('day');
       const expiryDate = moment().add(parseInt(days), 'days').endOf('day');
-      
+
+      // Build mess filter
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
+
       const subscriptions = await Subscription.find({
+        ...messFilter,
         status: 'active',
         end_date: {
           $gte: today.toDate(),
@@ -526,9 +607,9 @@ class DashboardController {
 
   async getRevenueStats(req, res) {
     try {
-      const { period = 'month' } = req.query;
+      const { period = 'month', mess_id } = req.query;
       let startDate, endDate, groupBy;
-      
+
       switch (period) {
         case 'week':
           startDate = moment().startOf('week');
@@ -555,10 +636,23 @@ class DashboardController {
           endDate = moment().endOf('month');
           groupBy = 'day';
       }
-      
+
+      // Build mess filter
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
+
       const revenue = await Subscription.aggregate([
         {
           $match: {
+            ...messFilter,
             createdAt: {
               $gte: startDate.toDate(),
               $lte: endDate.toDate()
@@ -601,11 +695,25 @@ class DashboardController {
 
   async getSystemAlerts(req, res) {
     try {
+      const { mess_id } = req.query;
       const alerts = [];
       const today = moment();
-      
+
+      // Build mess filter
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
+
       // Check for expiring subscriptions
       const expiringCount = await Subscription.countDocuments({
+        ...messFilter,
         status: 'active',
         end_date: {
           $gte: today.toDate(),
@@ -623,13 +731,14 @@ class DashboardController {
       
       // Check for low attendance
       const todayAttendance = await Attendance.countDocuments({
+        ...messFilter,
         scan_time: {
           $gte: today.startOf('day').toDate(),
           $lte: today.endOf('day').toDate()
         }
       });
 
-      const activeUsers = await User.countDocuments({ status: 'active' });
+      const activeUsers = await User.countDocuments({ ...messFilter, status: 'active' });
       const attendanceRate = activeUsers > 0 ? (todayAttendance / (activeUsers * 3)) * 100 : 0;
       
       if (attendanceRate < 50) {
@@ -642,6 +751,7 @@ class DashboardController {
       
       // Check for pending payments
       const pendingPayments = await Subscription.countDocuments({
+        ...messFilter,
         payment_status: 'pending',
         status: 'active'
       });
@@ -669,16 +779,31 @@ class DashboardController {
 
   async getQuickStats(req, res) {
     try {
+      const { mess_id } = req.query;
       const today = moment();
       const thisMonth = moment().startOf('month');
-      
+
+      // Build mess filter
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
+
       const [totalUsers, activeSubscriptions, todayAttendance] = await Promise.all([
-        User.countDocuments({ status: 'active' }),
+        User.countDocuments({ ...messFilter, status: 'active' }),
         Subscription.countDocuments({
+          ...messFilter,
           status: 'active',
           end_date: { $gte: today.toDate() }
         }),
         Attendance.countDocuments({
+          ...messFilter,
           scan_time: {
             $gte: today.startOf('day').toDate(),
             $lte: today.endOf('day').toDate()
@@ -690,6 +815,7 @@ class DashboardController {
       const revenueResult = await Subscription.aggregate([
         {
           $match: {
+            ...messFilter,
             createdAt: { $gte: thisMonth.toDate() },
             payment_status: 'paid'
           }

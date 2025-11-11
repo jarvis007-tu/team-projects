@@ -88,9 +88,10 @@ class UserController {
       }
 
       // Check if user has permission to view this user
+      const currentUserId = req.user.user_id || req.user._id || req.user.id;
       if (req.user.role !== 'super_admin' &&
           req.user.role !== 'mess_admin' &&
-          req.user.id !== id) {
+          currentUserId !== id) {
         return res.status(403).json({
           success: false,
           message: 'You do not have permission to view this user'
@@ -204,7 +205,7 @@ class UserController {
       const userResponse = user.toObject();
       delete userResponse.password;
 
-      logger.info(`User created: ${user._id} for mess ${mess.name} by admin ${req.user.id}`);
+      logger.info(`User created: ${user._id} for mess ${mess.name} by admin ${req.user.user_id || req.user._id || req.user.id}`);
 
       res.status(201).json({
         success: true,
@@ -396,7 +397,7 @@ class UserController {
   // Update user profile
   async updateProfile(req, res) {
     try {
-      const userId = req.user.id;
+      const userId = req.user.user_id || req.user._id || req.user.id;
       const { full_name, phone } = req.body;
 
       const user = await User.findById(userId);
@@ -423,8 +424,10 @@ class UserController {
         }
       }
 
-      user.full_name = full_name;
-      user.phone = phone;
+      // Only update fields that are provided
+      if (full_name) user.full_name = full_name;
+      if (phone) user.phone = phone;
+
       await user.save();
 
       const userResponse = user.toObject();
@@ -447,7 +450,7 @@ class UserController {
   // Change password
   async changePassword(req, res) {
     try {
-      const userId = req.user.id;
+      const userId = req.user.user_id || req.user._id || req.user.id;
       const { currentPassword, newPassword } = req.body;
 
       const user = await User.findById(userId).select('+password');
@@ -489,7 +492,7 @@ class UserController {
   // Upload profile image
   async uploadProfileImage(req, res) {
     try {
-      const userId = req.user.id;
+      const userId = req.user.user_id || req.user._id || req.user.id;
 
       if (!req.file) {
         return res.status(400).json({

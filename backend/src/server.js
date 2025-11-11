@@ -107,7 +107,7 @@ class Server {
         });
       }
     });
-    this.app.use('/api/', limiter);
+    // this.app.use('/api/', limiter);
 
     // Request logging
     this.app.use((req, res, next) => {

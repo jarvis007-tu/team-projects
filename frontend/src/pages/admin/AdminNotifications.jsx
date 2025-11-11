@@ -25,12 +25,12 @@ const AdminNotifications = () => {
   const [newNotification, setNewNotification] = useState({
     title: '',
     message: '',
-    type: 'general', // general, alert, reminder, update
+    type: 'announcement', // announcement, subscription, menu, payment, reminder, system, test
     target_audience: 'all', // all, active_subscribers, mess_outlet
     mess_id: '',
     schedule_type: 'immediate', // immediate, scheduled
     scheduled_at: '',
-    priority: 'normal' // low, normal, high
+    priority: 'medium' // low, medium, high
   });
 
   const [newTemplate, setNewTemplate] = useState({
@@ -38,7 +38,7 @@ const AdminNotifications = () => {
     description: '',
     title: '',
     message: '',
-    type: 'general',
+    type: 'announcement',
     variables: []
   });
 
@@ -93,27 +93,37 @@ const AdminNotifications = () => {
         search: searchTerm || undefined,
         status: filterStatus !== 'all' ? filterStatus : undefined
       });
-      setNotifications(response.data);
+      // Handle different response structures
+      const notificationsData = response.data?.notifications || response.data || [];
+      const notificationsArray = Array.isArray(notificationsData) ? notificationsData : [];
+      setNotifications(notificationsArray);
     } catch (error) {
       toast.error('Failed to fetch notification history');
+      setNotifications([]);
     }
   };
 
   const fetchTemplates = async () => {
     try {
       const response = await notificationService.getNotificationTemplates();
-      setTemplates(response.data);
+      const templatesData = response.data?.templates || response.data || [];
+      const templatesArray = Array.isArray(templatesData) ? templatesData : [];
+      setTemplates(templatesArray);
     } catch (error) {
       toast.error('Failed to fetch templates');
+      setTemplates([]);
     }
   };
 
   const fetchScheduledNotifications = async () => {
     try {
       const response = await notificationService.getScheduledNotifications();
-      setScheduledNotifications(response.data);
+      const scheduledData = response.data?.notifications || response.data || [];
+      const scheduledArray = Array.isArray(scheduledData) ? scheduledData : [];
+      setScheduledNotifications(scheduledArray);
     } catch (error) {
       toast.error('Failed to fetch scheduled notifications');
+      setScheduledNotifications([]);
     }
   };
 
@@ -438,10 +448,11 @@ const AdminNotifications = () => {
                         onChange={(e) => setNewNotification({...newNotification, type: e.target.value})}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
                       >
-                        <option value="general">General</option>
-                        <option value="alert">Alert</option>
+                        <option value="announcement">Announcement</option>
                         <option value="reminder">Reminder</option>
-                        <option value="update">Update</option>
+                        <option value="alert">Alert</option>
+                        <option value="subscription">Subscription</option>
+                        <option value="menu">Menu</option>
                       </select>
                     </div>
                     <div className="md:col-span-2">
@@ -480,7 +491,7 @@ const AdminNotifications = () => {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
                       >
                         <option value="low">Low</option>
-                        <option value="normal">Normal</option>
+                        <option value="medium">Medium</option>
                         <option value="high">High</option>
                       </select>
                     </div>
@@ -791,10 +802,11 @@ const AdminNotifications = () => {
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
                     >
-                      <option value="general">General</option>
-                      <option value="alert">Alert</option>
+                      <option value="announcement">Announcement</option>
                       <option value="reminder">Reminder</option>
-                      <option value="update">Update</option>
+                      <option value="alert">Alert</option>
+                      <option value="subscription">Subscription</option>
+                      <option value="menu">Menu</option>
                     </select>
                   </div>
                 </div>

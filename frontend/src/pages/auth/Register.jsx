@@ -35,7 +35,7 @@ const Register = () => {
       }
     } catch (error) {
       console.error('Error fetching messes:', error);
-      toast.error('Failed to load messes');
+      // toast.error('Failed to load messes');
     } finally {
       setLoadingMesses(false);
     }
@@ -52,10 +52,10 @@ const Register = () => {
     e.preventDefault();
 
     // Validation
-    if (!formData.mess_id) {
-      toast.error('Please select a mess');
-      return;
-    }
+    // if (!formData.mess_id) {
+    //   toast.error('Please select a mess');
+    //   return;
+    // }
 
     if (formData.password !== formData.confirm_password) {
       toast.error('Passwords do not match');

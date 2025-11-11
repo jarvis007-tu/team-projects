@@ -30,6 +30,7 @@ const AdminSubscriptions = () => {
   const [newSubscription, setNewSubscription] = useState({
     mess_id: '',
     plan_id: '',
+    sub_type: 'both',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
     status: 'active'
@@ -128,6 +129,7 @@ const AdminSubscriptions = () => {
       setNewSubscription({
         mess_id: '',
         plan_id: '',
+        sub_type: 'both',
         start_date: new Date().toISOString().split('T')[0],
         end_date: '',
         status: 'active'
@@ -646,6 +648,26 @@ const AdminSubscriptions = () => {
                     ))}
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                    Food Preference
+                  </label>
+                  <select
+                    value={newSubscription.sub_type}
+                    onChange={(e) => setNewSubscription({...newSubscription, sub_type: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                    required
+                  >
+                    <option value="veg">Vegetarian</option>
+                    <option value="non-veg">Non-Vegetarian</option>
+                    <option value="both">Both</option>
+                  </select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Helps plan meals according to dietary preferences
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                     Start Date

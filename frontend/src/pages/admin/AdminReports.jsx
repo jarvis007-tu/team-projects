@@ -103,7 +103,8 @@ const AdminReports = () => {
           response = await reportService.getAttendanceAnalytics(params);
           break;
         case 'user-activity':
-          response = await reportService.getUserActivityReport(params);
+          // User activity report requires user_id, use trends instead for overview
+          response = await reportService.getTrendsAnalysis({ ...params, metric: 'attendance' });
           break;
         case 'meal-consumption':
           response = await reportService.getMealConsumptionReport(params);
@@ -255,50 +256,60 @@ const AdminReports = () => {
     }
   };
 
-  const renderDashboardStats = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Revenue</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">₹{(reportData.totalRevenue || 0).toLocaleString()}</p>
-            <p className="text-sm text-green-600 mt-1">+{reportData.revenueChange || '0%'} from last month</p>
+  const renderDashboardStats = () => {
+    // Extract data from reportData
+    const activeUsers = reportData?.users?.active || reportData?.activeUsers || 0;
+    const totalUsers = reportData?.users?.total || reportData?.totalUsers || 0;
+    const avgAttendance = reportData?.attendance?.avgAttendancePerUser || reportData?.avgAttendance || 0;
+    const avgDailyAttendance = reportData?.attendance?.avgDailyAttendance || 0;
+    const totalAttendance = reportData?.attendance?.totalThisMonth || reportData?.mealsServed || 0;
+    const monthlyRevenue = reportData?.subscriptions?.monthlyRevenue || reportData?.totalRevenue || 0;
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Revenue</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">₹{monthlyRevenue.toLocaleString()}</p>
+              <p className="text-sm text-gray-500 mt-1">This month</p>
+            </div>
+            <FiDollarSign className="w-8 h-8 text-green-500" />
           </div>
-          <FiDollarSign className="w-8 h-8 text-green-500" />
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Users</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{activeUsers}</p>
+              <p className="text-sm text-gray-500 mt-1">Out of {totalUsers} total</p>
+            </div>
+            <FiUsers className="w-8 h-8 text-blue-500" />
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Avg Attendance</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{avgAttendance}</p>
+              <p className="text-sm text-gray-500 mt-1">Meals per user this month</p>
+            </div>
+            <FiBarChart2 className="w-8 h-8 text-purple-500" />
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Meals Served</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalAttendance.toLocaleString()}</p>
+              <p className="text-sm text-gray-500 mt-1">{avgDailyAttendance}/day average</p>
+            </div>
+            <FiPieChart className="w-8 h-8 text-orange-500" />
+          </div>
         </div>
       </div>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Users</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{reportData.activeUsers || 0}</p>
-            <p className="text-sm text-blue-600 mt-1">+{reportData.userChange || '0%'} from last month</p>
-          </div>
-          <FiUsers className="w-8 h-8 text-blue-500" />
-        </div>
-      </div>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Avg Attendance</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{reportData.avgAttendance || 0}%</p>
-            <p className="text-sm text-purple-600 mt-1">{reportData.attendanceChange || '0%'} from last month</p>
-          </div>
-          <FiBarChart2 className="w-8 h-8 text-purple-500" />
-        </div>
-      </div>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Meals Served</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{(reportData.mealsServed || 0).toLocaleString()}</p>
-            <p className="text-sm text-orange-600 mt-1">+{reportData.mealsChange || '0%'} from last month</p>
-          </div>
-          <FiPieChart className="w-8 h-8 text-orange-500" />
-        </div>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderReportContent = () => {
     if (loading) {

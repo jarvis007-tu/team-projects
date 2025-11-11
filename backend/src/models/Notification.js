@@ -24,7 +24,7 @@ const NotificationSchema = new mongoose.Schema({
   type: {
     type: String,
     enum: {
-      values: ['announcement', 'subscription', 'menu', 'payment', 'reminder', 'system', 'test'],
+      values: ['announcement', 'reminder', 'alert', 'subscription', 'menu'],
       message: '{VALUE} is not a valid notification type'
     },
     default: 'announcement'

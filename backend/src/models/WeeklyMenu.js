@@ -27,7 +27,7 @@ const WeeklyMenuSchema = new mongoose.Schema({
   meal_type: {
     type: String,
     enum: {
-      values: ['breakfast', 'lunch', 'dinner'],
+      values: ['breakfast', 'lunch', 'snack', 'dinner'],
       message: '{VALUE} is not a valid meal type'
     },
     required: [true, 'Meal type is required']

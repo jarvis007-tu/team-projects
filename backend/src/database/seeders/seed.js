@@ -157,11 +157,16 @@ async function seed() {
       const startDate = moment().subtract(30, 'days').toDate();
       const endDate = moment().add(30, 'days').toDate();
 
+      // Distribute subscription types: veg, non-veg, both
+      const subTypes = ['veg', 'non-veg', 'both'];
+      const subType = subTypes[i % 3];
+
       const subscription = await Subscription.create({
         user_id: users[i]._id,
         mess_id: users[i].mess_id, // Use user's assigned mess
         plan_type: ['daily', 'weekly', 'monthly'][i % 3],
         plan_name: `${['Daily', 'Weekly', 'Monthly'][i % 3]} Plan`,
+        sub_type: subType,
         amount: [50, 300, 1000][i % 3],
         start_date: startDate,
         end_date: endDate,
@@ -175,8 +180,8 @@ async function seed() {
           lunch: true,
           dinner: i % 2 === 0
         },
-        special_requirements: i % 3 === 0 ? 'Vegetarian only' : null,
-        notes: `Test subscription for user ${i + 1}`
+        special_requirements: subType === 'veg' ? 'Vegetarian only' : subType === 'non-veg' ? 'Non-vegetarian preferred' : null,
+        notes: `Test subscription for user ${i + 1} (${subType})`
       });
       subscriptions.push(subscription);
     }
@@ -274,7 +279,7 @@ async function seed() {
       user_id: null, // Broadcast notification
       title: 'System Maintenance',
       message: 'The system will undergo maintenance on Sunday from 2 AM to 4 AM. Please plan accordingly.',
-      type: 'system',
+      type: 'alert',
       priority: 'high',
       is_read: false,
       metadata: { maintenance_type: 'scheduled' },

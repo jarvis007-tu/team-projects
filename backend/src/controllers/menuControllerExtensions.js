@@ -6,10 +6,14 @@ const menuExtensions = {
   // Get all menu items
   async getMenuItems(req, res) {
     try {
-      const { category, search, page = 1, limit = 10 } = req.query;
+      const { category, search, page = 1, limit = 100 } = req.query;
       const skip = (page - 1) * limit;
 
-      const whereConditions = { is_active: true };
+      const whereConditions = { is_active: true, deleted_at: null };
+
+      if (category) {
+        whereConditions.meal_type = category;
+      }
 
       if (search) {
         whereConditions.items = {
@@ -22,26 +26,39 @@ const menuExtensions = {
       const menuItems = await WeeklyMenu.find(whereConditions)
         .limit(parseInt(limit))
         .skip(parseInt(skip))
-        .sort({ day: 1, meal_type: 1 });
+        .sort({ day: 1, meal_type: 1 })
+        .lean();
 
       // Transform the data to match frontend expectations
-      const transformedItems = menuItems.map(item => ({
-        id: item.menu_id,
-        name: item.meal_type + ' - ' + item.day,
-        items: JSON.parse(item.items || '[]'),
-        category: item.meal_type,
-        day: item.day,
-        special_note: item.special_note,
-        is_available: item.is_active,
-        nutrition: {
-          calories: item.calories || 0,
-          protein: item.protein || 0,
-          carbs: item.carbs || 0,
-          fat: item.fat || 0
-        },
-        created_at: item.createdAt,
-        updated_at: item.updatedAt
-      }));
+      const transformedItems = menuItems.map(item => {
+        // items is already an array in the model, no need to parse
+        const itemsArray = Array.isArray(item.items) ? item.items : [];
+
+        return {
+          item_id: item._id.toString(),
+          name: `${item.meal_type.charAt(0).toUpperCase() + item.meal_type.slice(1)} - ${item.day.charAt(0).toUpperCase() + item.day.slice(1)}`,
+          description: itemsArray.join(', '),
+          items: itemsArray,
+          category: item.meal_type,
+          day: item.day,
+          special_note: item.notes || '',
+          is_available: item.is_active,
+          is_vegetarian: item.is_veg || false,
+          is_vegan: false,
+          price: item.price || 0,
+          nutritional_info: item.nutritional_info || {
+            calories: 0,
+            protein: 0,
+            carbs: 0,
+            fat: 0,
+            fiber: 0
+          },
+          allergens: item.allergen_info || [],
+          image_url: null,
+          created_at: item.createdAt,
+          updated_at: item.updatedAt
+        };
+      });
 
       res.json({
         success: true,
@@ -56,7 +73,8 @@ const menuExtensions = {
       logger.error('Error fetching menu items:', error);
       res.status(500).json({
         success: false,
-        message: 'Failed to fetch menu items'
+        message: 'Failed to fetch menu items',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   },
@@ -64,39 +82,98 @@ const menuExtensions = {
   // Create menu item
   async createMenuItem(req, res) {
     try {
-      const { name, items, category, day, special_note, nutrition } = req.body;
+      const { name, description, items, category, day, special_note, nutrition, nutritional_info, mess_id, price, is_vegetarian, allergens } = req.body;
+
+      // Handle items - if description provided but not items, split description into items
+      let itemsArray = [];
+      if (Array.isArray(items) && items.length > 0) {
+        itemsArray = items;
+      } else if (description) {
+        // Split description by comma or use as single item
+        itemsArray = description.includes(',')
+          ? description.split(',').map(item => item.trim()).filter(item => item)
+          : [description];
+      } else if (name) {
+        // Fallback to name
+        itemsArray = [name];
+      }
+
+      // Get or calculate week dates
+      const moment = require('moment');
+      const today = moment();
+      const weekStart = moment().startOf('week');
+      const weekEnd = moment().endOf('week');
+
+      // User's mess_id or provided mess_id
+      const targetMessId = mess_id || req.user?.mess_id;
+
+      if (!targetMessId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Mess ID is required'
+        });
+      }
+
+      // Get user ID - the User model's toJSON() renames _id to user_id
+      const userId = req.user?.user_id || req.user?._id || req.user?.id;
+
+      if (!userId) {
+        logger.error('User ID not found in req.user:', JSON.stringify(req.user));
+        return res.status(400).json({
+          success: false,
+          message: 'User authentication required - user ID not found'
+        });
+      }
+
+      // Use nutritional_info if provided, otherwise nutrition, otherwise defaults
+      const nutritionData = nutritional_info || nutrition || {};
 
       const menuItem = await WeeklyMenu.create({
-        day: day || 'monday',
-        meal_type: category || 'breakfast',
-        items: JSON.stringify(items || []),
-        special_note,
+        mess_id: targetMessId,
+        week_start_date: weekStart.toDate(),
+        week_end_date: weekEnd.toDate(),
+        day: day?.toLowerCase() || 'monday',
+        meal_type: category || 'breakfast',  // Don't lowercase - already correct
+        items: itemsArray,
+        notes: special_note || description || '',
         is_active: true,
-        created_by: req.user.id,
-        calories: nutrition?.calories,
-        protein: nutrition?.protein,
-        carbs: nutrition?.carbs,
-        fat: nutrition?.fat
+        created_by: userId,
+        nutritional_info: {
+          calories: nutritionData.calories || 0,
+          protein: nutritionData.protein || 0,
+          carbs: nutritionData.carbs || 0,
+          fat: nutritionData.fat || 0,
+          fiber: nutritionData.fiber || 0
+        },
+        price: price || 0,
+        is_veg: is_vegetarian !== undefined ? is_vegetarian : true,
+        allergen_info: allergens || []
       });
 
       res.status(201).json({
         success: true,
         message: 'Menu item created successfully',
         data: {
-          id: menuItem.menu_id,
-          name,
-          items: JSON.parse(menuItem.items),
+          item_id: menuItem._id.toString(),
+          name: `${menuItem.meal_type.charAt(0).toUpperCase() + menuItem.meal_type.slice(1)} - ${menuItem.day.charAt(0).toUpperCase() + menuItem.day.slice(1)}`,
+          description: itemsArray.join(', '),
+          items: menuItem.items,
           category: menuItem.meal_type,
           day: menuItem.day,
-          special_note: menuItem.special_note,
-          is_available: menuItem.is_active
+          special_note: menuItem.notes,
+          is_available: menuItem.is_active,
+          is_vegetarian: menuItem.is_veg,
+          price: menuItem.price,
+          nutritional_info: menuItem.nutritional_info,
+          allergens: menuItem.allergen_info
         }
       });
     } catch (error) {
       logger.error('Error creating menu item:', error);
       res.status(500).json({
         success: false,
-        message: 'Failed to create menu item'
+        message: 'Failed to create menu item',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   },
@@ -105,7 +182,7 @@ const menuExtensions = {
   async updateMenuItem(req, res) {
     try {
       const { id } = req.params;
-      const { name, items, category, day, special_note, is_available, nutrition } = req.body;
+      const { name, items, category, day, special_note, is_available, nutrition, price, is_vegetarian, allergens } = req.body;
 
       const menuItem = await WeeklyMenu.findById(id);
 
@@ -116,36 +193,55 @@ const menuExtensions = {
         });
       }
 
-      menuItem.day = day || menuItem.day;
-      menuItem.meal_type = category || menuItem.meal_type;
-      menuItem.items = items ? JSON.stringify(items) : menuItem.items;
-      menuItem.special_note = special_note !== undefined ? special_note : menuItem.special_note;
-      menuItem.is_active = is_available !== undefined ? is_available : menuItem.is_active;
-      menuItem.calories = nutrition?.calories || menuItem.calories;
-      menuItem.protein = nutrition?.protein || menuItem.protein;
-      menuItem.carbs = nutrition?.carbs || menuItem.carbs;
-      menuItem.fat = nutrition?.fat || menuItem.fat;
+      // Update fields
+      if (day) menuItem.day = day.toLowerCase();
+      if (category) menuItem.meal_type = category.toLowerCase();
+      if (items) menuItem.items = Array.isArray(items) ? items : menuItem.items;
+      if (special_note !== undefined) menuItem.notes = special_note;
+      if (is_available !== undefined) menuItem.is_active = is_available;
+      if (price !== undefined) menuItem.price = price;
+      if (is_vegetarian !== undefined) menuItem.is_veg = is_vegetarian;
+      if (allergens) menuItem.allergen_info = allergens;
+
+      // Update nutritional info
+      if (nutrition) {
+        menuItem.nutritional_info = {
+          calories: nutrition.calories || menuItem.nutritional_info?.calories || 0,
+          protein: nutrition.protein || menuItem.nutritional_info?.protein || 0,
+          carbs: nutrition.carbs || menuItem.nutritional_info?.carbs || 0,
+          fat: nutrition.fat || menuItem.nutritional_info?.fat || 0,
+          fiber: nutrition.fiber || menuItem.nutritional_info?.fiber || 0
+        };
+      }
 
       await menuItem.save();
+
+      const itemsArray = Array.isArray(menuItem.items) ? menuItem.items : [];
 
       res.json({
         success: true,
         message: 'Menu item updated successfully',
         data: {
-          id: menuItem.menu_id,
-          name,
-          items: JSON.parse(menuItem.items),
+          item_id: menuItem._id.toString(),
+          name: `${menuItem.meal_type.charAt(0).toUpperCase() + menuItem.meal_type.slice(1)} - ${menuItem.day.charAt(0).toUpperCase() + menuItem.day.slice(1)}`,
+          description: itemsArray.join(', '),
+          items: menuItem.items,
           category: menuItem.meal_type,
           day: menuItem.day,
-          special_note: menuItem.special_note,
-          is_available: menuItem.is_active
+          special_note: menuItem.notes,
+          is_available: menuItem.is_active,
+          is_vegetarian: menuItem.is_veg,
+          price: menuItem.price,
+          nutritional_info: menuItem.nutritional_info,
+          allergens: menuItem.allergen_info
         }
       });
     } catch (error) {
       logger.error('Error updating menu item:', error);
       res.status(500).json({
         success: false,
-        message: 'Failed to update menu item'
+        message: 'Failed to update menu item',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   },
@@ -264,10 +360,10 @@ const menuExtensions = {
   async getMenuCategories(req, res) {
     try {
       const categories = [
-        { id: 1, name: 'breakfast', display_name: 'Breakfast' },
-        { id: 2, name: 'lunch', display_name: 'Lunch' },
-        { id: 3, name: 'dinner', display_name: 'Dinner' },
-        { id: 4, name: 'snacks', display_name: 'Snacks' }
+        { category_id: 'breakfast', name: 'Breakfast' },
+        { category_id: 'lunch', name: 'Lunch' },
+        { category_id: 'snack', name: 'Snacks' },
+        { category_id: 'dinner', name: 'Dinner' }
       ];
 
       res.json({

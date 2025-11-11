@@ -15,22 +15,28 @@ class ReportController {
       const endOfToday = moment().endOf('day').toDate();
       const startOfMonth = moment().startOf('month').toDate();
       const endOfMonth = moment().endOf('month').toDate();
+      const messId = req.messContext?.messId;
+
+      // Build query filter based on mess context
+      const messFilter = messId ? { mess_id: messId } : {};
 
       // User statistics
       const [totalUsers, activeUsers, totalAdmins] = await Promise.all([
-        User.countDocuments(),
-        User.countDocuments({ status: 'active' }),
-        User.countDocuments({ role: 'admin' })
+        User.countDocuments(messFilter),
+        User.countDocuments({ ...messFilter, status: 'active' }),
+        User.countDocuments({ ...messFilter, role: 'admin' })
       ]);
 
       // Subscription statistics
       const sevenDaysFromNow = moment().add(7, 'days').endOf('day').toDate();
       const [activeSubscriptions, expiringThisWeek, monthlyRevenueResult] = await Promise.all([
         Subscription.countDocuments({
+          ...messFilter,
           status: 'active',
           end_date: { $gte: today }
         }),
         Subscription.countDocuments({
+          ...messFilter,
           status: 'active',
           end_date: {
             $gte: today,
@@ -40,6 +46,7 @@ class ReportController {
         Subscription.aggregate([
           {
             $match: {
+              ...messFilter,
               payment_status: 'paid',
               createdAt: {
                 $gte: startOfMonth,
@@ -58,10 +65,31 @@ class ReportController {
 
       const monthlyRevenue = monthlyRevenueResult.length > 0 ? monthlyRevenueResult[0].total : 0;
 
+      // Calculate average attendance (NEW FEATURE)
+      const totalDaysInMonth = moment().daysInMonth();
+      const totalAttendanceThisMonth = await Attendance.countDocuments({
+        ...messFilter,
+        scan_date: {
+          $gte: startOfMonth,
+          $lte: endOfMonth
+        }
+      });
+
+      // Average attendance per day
+      const avgDailyAttendance = totalDaysInMonth > 0
+        ? (totalAttendanceThisMonth / totalDaysInMonth).toFixed(2)
+        : 0;
+
+      // Average attendance per active user
+      const avgAttendancePerUser = activeUsers > 0
+        ? (totalAttendanceThisMonth / activeUsers).toFixed(2)
+        : 0;
+
       // Today's attendance
       const todayAttendance = await Attendance.aggregate([
         {
           $match: {
+            ...messFilter,
             scan_date: {
               $gte: today,
               $lte: endOfToday
@@ -87,6 +115,7 @@ class ReportController {
       const monthlyTrend = await Attendance.aggregate([
         {
           $match: {
+            ...messFilter,
             scan_date: {
               $gte: startOfMonth,
               $lte: endOfMonth
@@ -128,7 +157,10 @@ class ReportController {
           },
           attendance: {
             today: todayAttendance,
-            monthlyTrend
+            monthlyTrend,
+            avgDailyAttendance: parseFloat(avgDailyAttendance),
+            avgAttendancePerUser: parseFloat(avgAttendancePerUser),
+            totalThisMonth: totalAttendanceThisMonth
           }
         }
       });

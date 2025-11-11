@@ -25,6 +25,10 @@ const validateBulkNotification = (req, res, next) => {
     message: Joi.string().min(10).required(),
     type: Joi.string().valid('announcement', 'reminder', 'alert', 'subscription', 'menu').optional(),
     priority: Joi.string().valid('low', 'medium', 'high').optional(),
+    target_audience: Joi.string().valid('all', 'active_subscribers', 'mess_outlet').optional(),
+    mess_id: Joi.string().optional().allow(null, ''),
+    schedule_type: Joi.string().valid('immediate', 'scheduled').optional(),
+    scheduled_at: Joi.date().optional().allow(null, ''),
     recipient_criteria: Joi.object({
       role: Joi.string().valid('admin', 'subscriber').optional(),
       has_active_subscription: Joi.boolean().optional(),

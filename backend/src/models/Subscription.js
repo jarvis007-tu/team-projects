@@ -27,6 +27,15 @@ const SubscriptionSchema = new mongoose.Schema({
     trim: true,
     maxlength: [100, 'Plan name must not exceed 100 characters']
   },
+  sub_type: {
+    type: String,
+    enum: {
+      values: ['veg', 'non-veg', 'both'],
+      message: '{VALUE} is not a valid subscription type'
+    },
+    required: true,
+    default: 'both'
+  },
   amount: {
     type: Number,
     required: [true, 'Amount is required'],
@@ -109,7 +118,9 @@ SubscriptionSchema.index({ start_date: 1 });
 SubscriptionSchema.index({ end_date: 1 });
 SubscriptionSchema.index({ plan_type: 1 });
 SubscriptionSchema.index({ payment_status: 1 });
+SubscriptionSchema.index({ sub_type: 1 }); // Index for subscription type filtering
 SubscriptionSchema.index({ mess_id: 1, status: 1 }); // Composite index for mess filtering
+SubscriptionSchema.index({ mess_id: 1, sub_type: 1, status: 1 }); // Composite index for mess and sub_type filtering
 SubscriptionSchema.index({ user_id: 1, status: 1, start_date: 1, end_date: 1 }); // Composite index
 
 // Pre-save validation

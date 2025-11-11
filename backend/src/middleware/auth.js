@@ -260,10 +260,88 @@ const deviceCheck = async (req, res, next) => {
   }
 };
 
+/**
+ * Middleware to enforce mess-based access control
+ * - super_admin: Can access all messes (no filtering)
+ * - mess_admin: Can only access their assigned mess (filtered by mess_id)
+ * - subscriber: Can only access their own mess (filtered by mess_id)
+ */
+const enforceMessAccess = (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    // super_admin has global access - no filtering needed
+    if (req.user.role === 'super_admin') {
+      req.isGlobalAccess = true;
+      req.messFilter = {}; // No filter for super_admin
+      logger.debug(`Global access granted to super_admin: ${req.user.user_id}`);
+      return next();
+    }
+
+    // mess_admin and subscriber can only access their assigned mess
+    if (req.user.role === 'mess_admin' || req.user.role === 'subscriber') {
+      if (!req.user.mess_id) {
+        return res.status(403).json({
+          success: false,
+          message: 'No mess assigned to your account'
+        });
+      }
+
+      req.isGlobalAccess = false;
+      req.messFilter = { mess_id: req.user.mess_id }; // Filter by assigned mess
+      req.allowedMessId = req.user.mess_id; // Store for easy access
+
+      logger.debug(`Mess-specific access granted to ${req.user.role}: ${req.user.user_id}, mess: ${req.user.mess_id}`);
+      return next();
+    }
+
+    // Unknown role
+    return res.status(403).json({
+      success: false,
+      message: 'Invalid role'
+    });
+  } catch (error) {
+    logger.error('Mess access enforcement error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Access control check failed'
+    });
+  }
+};
+
+/**
+ * Middleware to check if user is super_admin only
+ */
+const requireSuperAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required'
+    });
+  }
+
+  if (req.user.role !== 'super_admin') {
+    logger.warn(`Super admin access denied for user ${req.user.user_id} (role: ${req.user.role})`);
+    return res.status(403).json({
+      success: false,
+      message: 'This action requires super admin privileges'
+    });
+  }
+
+  next();
+};
+
 module.exports = {
   authenticate,
   authorize,
   refreshAuth,
   optionalAuth,
-  deviceCheck
+  deviceCheck,
+  enforceMessAccess,
+  requireSuperAdmin
 };

@@ -14,6 +14,7 @@ class MealConfirmationController {
     try {
       const userId = req.user.id;
       const { meal_date, meal_type } = req.body;
+      const userMessId = req.user.mess_id; // Get user's mess_id
 
       // Validate meal date (should be today or future)
       const mealMoment = moment(meal_date);
@@ -26,9 +27,10 @@ class MealConfirmationController {
         });
       }
 
-      // Check active subscription
+      // Check active subscription for user's mess
       const subscription = await Subscription.findOne({
         user_id: userId,
+        mess_id: userMessId, // Filter by user's mess
         status: 'active',
         start_date: { $lte: meal_date },
         end_date: { $gte: meal_date }
@@ -43,9 +45,10 @@ class MealConfirmationController {
         });
       }
 
-      // Check if already confirmed
+      // Check if already confirmed (with mess_id)
       const existingConfirmation = await MealConfirmation.findOne({
         user_id: userId,
+        mess_id: userMessId,
         meal_date,
         meal_type
       });
@@ -74,9 +77,10 @@ class MealConfirmationController {
         }
       }
 
-      // Create new confirmation
+      // Create new confirmation with mess_id
       const confirmation = await MealConfirmation.create([{
         user_id: userId,
+        mess_id: userMessId, // Add mess_id
         meal_date,
         meal_type,
         status: 'confirmed'
@@ -84,6 +88,8 @@ class MealConfirmationController {
 
       await session.commitTransaction();
       session.endSession();
+
+      logger.info(`Meal confirmed for user ${userId}, mess ${userMessId}, date ${meal_date}, type ${meal_type}`);
 
       res.status(201).json({
         success: true,
@@ -202,15 +208,25 @@ class MealConfirmationController {
         meal_date: date || moment().format('YYYY-MM-DD')
       };
 
+      // Mess filtering for mess_admin
+      if (req.user.role === 'mess_admin') {
+        queryConditions.mess_id = req.user.mess_id;
+      }
+
       if (meal_type) queryConditions.meal_type = meal_type;
 
       const confirmations = await MealConfirmation.find(queryConditions)
         .populate('user_id', 'full_name email phone')
         .sort({ meal_type: 1, confirmed_at: 1 });
 
-      // Get summary
+      // Get summary with mess filtering
+      const summaryMatch = { meal_date: date || moment().format('YYYY-MM-DD') };
+      if (req.user.role === 'mess_admin') {
+        summaryMatch.mess_id = req.user.mess_id;
+      }
+
       const summary = await MealConfirmation.aggregate([
-        { $match: { meal_date: date || moment().format('YYYY-MM-DD') } },
+        { $match: summaryMatch },
         { $group: { _id: { meal_type: '$meal_type', status: '$status' }, count: { $sum: 1 } } },
         { $project: { meal_type: '$_id.meal_type', status: '$_id.status', count: 1, _id: 0 } }
       ]);

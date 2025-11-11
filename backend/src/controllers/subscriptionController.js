@@ -132,6 +132,25 @@ class SubscriptionController {
         });
       }
 
+      // Mess boundary check for mess_admin
+      if (req.user.role === 'mess_admin') {
+        // mess_admin can only create subscriptions for users in their own mess
+        if (user.mess_id.toString() !== req.user.mess_id.toString()) {
+          return res.status(403).json({
+            success: false,
+            message: 'You can only create subscriptions for users in your own mess'
+          });
+        }
+
+        // mess_admin cannot specify a different mess_id
+        if (mess_id && mess_id !== req.user.mess_id.toString()) {
+          return res.status(403).json({
+            success: false,
+            message: 'You can only create subscriptions for your own mess'
+          });
+        }
+      }
+
       // Use mess_id from request or user's mess_id
       const subscriptionMessId = mess_id || user.mess_id;
 
@@ -243,18 +262,31 @@ class SubscriptionController {
       const { id } = req.params;
       const updates = req.body;
 
-      const subscription = await Subscription.findByIdAndUpdate(
-        id,
-        updates,
-        { new: true, runValidators: true }
-      );
+      // Get subscription first to check mess ownership
+      const existingSubscription = await Subscription.findById(id);
 
-      if (!subscription) {
+      if (!existingSubscription) {
         return res.status(404).json({
           success: false,
           message: 'Subscription not found'
         });
       }
+
+      // Mess boundary check for mess_admin
+      if (req.user.role === 'mess_admin' &&
+          existingSubscription.mess_id.toString() !== req.user.mess_id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only update subscriptions from your own mess'
+        });
+      }
+
+      // Update subscription
+      const subscription = await Subscription.findByIdAndUpdate(
+        id,
+        updates,
+        { new: true, runValidators: true }
+      );
 
       res.json({
         success: true,
@@ -275,18 +307,32 @@ class SubscriptionController {
     try {
       const { id } = req.params;
 
+      // Get subscription first to check mess ownership
+      const existingSubscription = await Subscription.findById(id);
+
+      if (!existingSubscription) {
+        return res.status(404).json({
+          success: false,
+          message: 'Subscription not found'
+        });
+      }
+
+      // Mess boundary check for mess_admin
+      if (req.user.role === 'mess_admin' &&
+          existingSubscription.mess_id.toString() !== req.user.mess_id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only cancel subscriptions from your own mess'
+        });
+      }
+
       const subscription = await Subscription.findByIdAndUpdate(
         id,
         { status: 'cancelled' },
         { new: true }
       );
 
-      if (!subscription) {
-        return res.status(404).json({
-          success: false,
-          message: 'Subscription not found'
-        });
-      }
+      logger.info(`Subscription ${id} cancelled by ${req.user.role}: ${req.user.user_id}`);
 
       res.json({
         success: true,

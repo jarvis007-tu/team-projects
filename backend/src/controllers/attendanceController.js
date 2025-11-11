@@ -296,13 +296,23 @@ class AttendanceController {
       const filter = { scan_date: today };
       if (meal_type) filter.meal_type = meal_type;
 
+      // Mess boundary check for mess_admin
+      if (req.user.role === 'mess_admin') {
+        filter.mess_id = req.user.mess_id;
+      }
+
       const attendance = await Attendance.find(filter)
         .populate('user_id', 'user_id full_name email phone')
         .sort({ scan_time: -1 });
 
       // Get meal-wise count
+      const matchFilter = { scan_date: today };
+      if (req.user.role === 'mess_admin') {
+        matchFilter.mess_id = req.user.mess_id;
+      }
+
       const mealCounts = await Attendance.aggregate([
-        { $match: { scan_date: today } },
+        { $match: matchFilter },
         {
           $group: {
             _id: '$meal_type',

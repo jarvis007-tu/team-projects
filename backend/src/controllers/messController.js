@@ -128,6 +128,19 @@ class MessController {
       // Build filter
       const filter = { deleted_at: null };
 
+      // Mess boundary check for mess_admin and subscriber
+      // - super_admin: sees ALL messes
+      // - mess_admin & subscriber: see only their assigned mess
+      if (req.user.role !== 'super_admin') {
+        if (!req.user.mess_id) {
+          return res.status(403).json({
+            success: false,
+            message: 'No mess assigned to your account'
+          });
+        }
+        filter._id = req.user.mess_id;
+      }
+
       if (status) {
         filter.status = status;
       }
@@ -156,6 +169,8 @@ class MessController {
         .sort({ created_at: -1 })
         .skip(parseInt(offset))
         .limit(parseInt(limit));
+
+      logger.debug(`Messes fetched by ${req.user.role}: ${messes.length} results`);
 
       res.json({
         success: true,
@@ -190,6 +205,18 @@ class MessController {
           success: false,
           message: 'Mess not found'
         });
+      }
+
+      // Mess boundary check for mess_admin and subscriber
+      // - super_admin: can view any mess
+      // - mess_admin & subscriber: can only view their assigned mess
+      if (req.user.role !== 'super_admin') {
+        if (!req.user.mess_id || req.user.mess_id.toString() !== mess_id) {
+          return res.status(403).json({
+            success: false,
+            message: 'You do not have permission to view this mess'
+          });
+        }
       }
 
       // Get user count

@@ -294,7 +294,18 @@ class UserController {
         });
       }
 
+      // Mess boundary check - mess_admin can only delete users from their own mess
+      if (req.user.role === 'mess_admin' &&
+          user.mess_id.toString() !== req.user.mess_id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only delete users from your own mess'
+        });
+      }
+
       await user.softDelete(); // Soft delete using plugin
+
+      logger.info(`User ${user._id} deleted by ${req.user.role}: ${req.user.user_id}`);
 
       res.json({
         success: true,

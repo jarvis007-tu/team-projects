@@ -145,7 +145,11 @@ const AdminMenuManagement = () => {
 
   const fetchCategories = async () => {
     try {
-      const messId = user?.role === 'super_admin' ? selectedMessId : null;
+      // For super_admin: if no mess selected, use first mess to avoid duplicates
+      let messId = null;
+      if (user?.role === 'super_admin') {
+        messId = selectedMessId || (allMesses.length > 0 ? allMesses[0].mess_id : null);
+      }
       const response = await menuService.getMenuCategories(messId);
       setCategories(response.data);
     } catch (error) {
@@ -360,32 +364,65 @@ const AdminMenuManagement = () => {
     }
 
     const { day, mealType } = selectorContext;
+    const dayLower = day.toLowerCase();
 
+    // Build updated menu structure - only update local state
     setWeeklyMenu(prev => {
-      const updated = { ...prev };
-      if (!updated[day]) {
-        updated[day] = {};
+      // Deep copy to avoid mutation issues
+      const updatedMenu = JSON.parse(JSON.stringify(prev));
+
+      // Initialize day and mealType if they don't exist
+      if (!updatedMenu[dayLower]) {
+        updatedMenu[dayLower] = {};
       }
-      if (!updated[day][mealType]) {
-        updated[day][mealType] = [];
+      if (!updatedMenu[dayLower][mealType]) {
+        updatedMenu[dayLower][mealType] = {
+          items: [],
+          menu_items: [],
+          special_note: ''
+        };
       }
 
-      // Add selected items to the menu
-      const newItems = selectedMenuItems.map(item => ({
-        item_id: item.item_id,
-        name: item.name,
-        description: item.description,
-        items: item.items
-      }));
+      // Get current items and menu_items
+      const currentItems = updatedMenu[dayLower][mealType].items || [];
+      const currentMenuItems = updatedMenu[dayLower][mealType].menu_items || [];
 
-      updated[day][mealType] = [...(updated[day][mealType] || []), ...newItems];
+      // Add selected items (names) and menu_items (ObjectIds)
+      const newItemNames = selectedMenuItems.map(item => item.name);
+      const newMenuItemIds = selectedMenuItems.map(item => item.item_id);
 
-      return updated;
+      updatedMenu[dayLower][mealType] = {
+        ...updatedMenu[dayLower][mealType],
+        items: [...currentItems, ...newItemNames],
+        menu_items: [...currentMenuItems, ...newMenuItemIds]
+      };
+
+      return updatedMenu;
     });
 
     setShowMenuSelectorModal(false);
     setSelectedMenuItems([]);
     toast.success(`Added ${selectedMenuItems.length} item(s) to ${day} ${mealType}`);
+  };
+
+  const handleSaveWeeklyMenu = async () => {
+    try {
+      // Call backend API to persist changes
+      const messId = user?.role === 'super_admin' ? selectedMessId : null;
+      await menuService.updateWeeklyMenu({
+        menu: weeklyMenu,
+        week_start_date: selectedWeek,
+        ...(messId && { mess_id: messId })
+      });
+
+      toast.success('Weekly menu saved successfully');
+
+      // Refresh the weekly menu from backend to ensure consistency
+      await fetchWeeklyMenu();
+    } catch (error) {
+      console.error('Error saving weekly menu:', error);
+      toast.error('Failed to save weekly menu');
+    }
   };
 
   return (
@@ -565,44 +602,64 @@ const AdminMenuManagement = () => {
           <>
             {/* Weekly Menu View */}
             {currentView === 'weekly' && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
-                <div className="grid grid-cols-1 lg:grid-cols-7 gap-4 p-6">
-                  {days.map((day, dayIndex) => (
-                    <div key={day} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 dark:bg-gray-700">
-                      <h3 className="font-semibold text-gray-900 dark:text-white mb-4 text-center">
-                        {day}
-                      </h3>
-                      {mealTypes.map((mealType) => (
-                        <div key={mealType} className="mb-4">
-                          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 capitalize">
-                            {mealType}
-                          </h4>
-                          <div className="space-y-2">
-                            {weeklyMenu[day]?.[mealType]?.map((item, idx) => (
-                              <div
-                                key={idx}
-                                className="p-2 bg-gray-50 dark:bg-gray-600 rounded text-sm text-gray-600 dark:text-gray-300"
-                              >
-                                {item.name || `Item ${item}`}
-                              </div>
-                            )) || (
-                              <div className="p-2 bg-gray-100 dark:bg-gray-600 rounded text-sm text-gray-400 dark:text-gray-300 text-center">
-                                No items
-                              </div>
-                            )}
+              <>
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+                  <div className="grid grid-cols-1 lg:grid-cols-7 gap-4 p-6">
+                    {days.map((day, dayIndex) => (
+                      <div key={day} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 dark:bg-gray-700">
+                        <h3 className="font-semibold text-gray-900 dark:text-white mb-4 text-center">
+                          {day}
+                        </h3>
+                        {mealTypes.map((mealType) => {
+                          const dayLower = day.toLowerCase();
+                          const mealData = weeklyMenu[dayLower]?.[mealType];
+                          // Backend returns {menu_items: [...], items: [...], special_note: ''}
+                          const menuItems = mealData?.items || [];
+
+                          return (
+                          <div key={mealType} className="mb-4">
+                            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 capitalize">
+                              {mealType}
+                            </h4>
+                            <div className="space-y-2">
+                              {menuItems.length > 0 ? menuItems.map((itemName, idx) => (
+                                <div
+                                  key={idx}
+                                  className="p-2 bg-gray-50 dark:bg-gray-600 rounded text-sm text-gray-600 dark:text-gray-300"
+                                >
+                                  {itemName}
+                                </div>
+                              )) : (
+                                <div className="p-2 bg-gray-100 dark:bg-gray-600 rounded text-sm text-gray-400 dark:text-gray-300 text-center">
+                                  No items
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => handleOpenMenuSelector(day, mealType)}
+                              className="w-full mt-2 p-1 border border-dashed border-gray-300 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-400 hover:border-primary-300 hover:text-primary-600 dark:hover:border-primary-400 dark:hover:text-primary-400"
+                            >
+                              + Add Item
+                            </button>
                           </div>
-                          <button
-                            onClick={() => handleOpenMenuSelector(day, mealType)}
-                            className="w-full mt-2 p-1 border border-dashed border-gray-300 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-400 hover:border-primary-300 hover:text-primary-600 dark:hover:border-primary-400 dark:hover:text-primary-400"
-                          >
-                            + Add Item
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+
+                {/* Save Button */}
+                <div className="flex justify-end mt-6">
+                  <button
+                    onClick={handleSaveWeeklyMenu}
+                    className="flex items-center space-x-2 px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors font-medium shadow-sm"
+                  >
+                    <FiSave className="w-5 h-5" />
+                    <span>Save Weekly Menu</span>
+                  </button>
+                </div>
+              </>
             )}
 
             {/* Menu Items View */}

@@ -6,9 +6,12 @@ import {
 } from 'react-icons/fi';
 import { MdRestaurantMenu, MdFastfood, MdLocalDining } from 'react-icons/md';
 import menuService from '../../services/menuService';
+import messService from '../../services/messService';
+import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 
 const AdminMenuManagement = () => {
+  const { user } = useAuth();
   const [currentView, setCurrentView] = useState('weekly'); // weekly, items, templates
   const [weeklyMenu, setWeeklyMenu] = useState({});
   const [menuItems, setMenuItems] = useState([]);
@@ -33,10 +36,14 @@ const AdminMenuManagement = () => {
   const [selectorSearchTerm, setSelectorSearchTerm] = useState('');
   const [selectedMenuItems, setSelectedMenuItems] = useState([]);
 
+  // Mess management for super_admin
+  const [selectedMessId, setSelectedMessId] = useState(null);
+  const [allMesses, setAllMesses] = useState([]);
+
   const [newItem, setNewItem] = useState({
     name: '',
     description: '',
-    category: '',
+    category_id: '',
     price: '',
     image_url: '',
     nutritional_info: {
@@ -61,9 +68,33 @@ const AdminMenuManagement = () => {
   const mealTypes = ['breakfast', 'lunch', 'snack', 'dinner'];
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+  // Fetch messes if super_admin
+  useEffect(() => {
+    const fetchMesses = async () => {
+      if (user?.role === 'super_admin') {
+        try {
+          const response = await messService.getAllMesses();
+          // API returns {messes: [...], pagination: {...}}
+          const messesData = response.messes || response.data || [];
+          setAllMesses(messesData);
+          if (messesData.length > 0) {
+            setSelectedMessId(messesData[0].mess_id);
+          }
+        } catch (error) {
+          console.error('Failed to fetch messes:', error);
+          toast.error('Failed to load messes');
+        }
+      }
+    };
+
+    if (user) {
+      fetchMesses();
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchData();
-  }, [currentView, selectedWeek, searchTerm, selectedCategory]);
+  }, [currentView, selectedWeek, searchTerm, selectedCategory, selectedMessId]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -85,7 +116,8 @@ const AdminMenuManagement = () => {
 
   const fetchWeeklyMenu = async () => {
     try {
-      const response = await menuService.getWeeklyMenu(selectedWeek);
+      const messId = user?.role === 'super_admin' ? selectedMessId : null;
+      const response = await menuService.getWeeklyMenu(selectedWeek, messId);
       setWeeklyMenu(response.data);
     } catch (error) {
       toast.error('Failed to fetch weekly menu');
@@ -94,10 +126,17 @@ const AdminMenuManagement = () => {
 
   const fetchMenuItems = async () => {
     try {
-      const response = await menuService.getMenuItems({
+      const params = {
         search: searchTerm || undefined,
         category: selectedCategory !== 'all' ? selectedCategory : undefined
-      });
+      };
+
+      // Add mess_id for super_admin
+      if (user?.role === 'super_admin' && selectedMessId) {
+        params.mess_id = selectedMessId;
+      }
+
+      const response = await menuService.getMenuItems(params);
       setMenuItems(response.data);
     } catch (error) {
       toast.error('Failed to fetch menu items');
@@ -106,7 +145,8 @@ const AdminMenuManagement = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await menuService.getMenuCategories();
+      const messId = user?.role === 'super_admin' ? selectedMessId : null;
+      const response = await menuService.getMenuCategories(messId);
       setCategories(response.data);
     } catch (error) {
       console.error('Failed to fetch categories');
@@ -115,7 +155,8 @@ const AdminMenuManagement = () => {
 
   const fetchMenuTemplates = async () => {
     try {
-      const response = await menuService.getMenuTemplates();
+      const messId = user?.role === 'super_admin' ? selectedMessId : null;
+      const response = await menuService.getMenuTemplates(messId);
       setMenuTemplates(response.data);
     } catch (error) {
       toast.error('Failed to fetch menu templates');
@@ -147,13 +188,20 @@ const AdminMenuManagement = () => {
   const handleCreateMenuItem = async (e) => {
     e.preventDefault();
     try {
-      await menuService.createMenuItem(newItem);
+      const payload = { ...newItem };
+
+      // Add mess_id for super_admin
+      if (user?.role === 'super_admin' && selectedMessId) {
+        payload.mess_id = selectedMessId;
+      }
+
+      await menuService.createMenuItem(payload);
       toast.success('Menu item created successfully');
       setShowItemModal(false);
       setNewItem({
         name: '',
         description: '',
-        category: '',
+        category_id: '',
         price: '',
         image_url: '',
         nutritional_info: {
@@ -389,6 +437,34 @@ const AdminMenuManagement = () => {
       </div>
 
       <div className="p-6">
+        {/* Mess Selector for Super Admin - Prominent Position */}
+        {user?.role === 'super_admin' && allMesses.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 mb-6 border-l-4 border-primary-500">
+            <div className="flex items-center space-x-4">
+              <div className="flex-shrink-0">
+                <MdRestaurantMenu className="w-6 h-6 text-primary-500" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                  Select Mess to Manage
+                </label>
+                <select
+                  value={selectedMessId || ''}
+                  onChange={(e) => setSelectedMessId(e.target.value)}
+                  className="w-full md:w-auto min-w-[300px] px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white font-medium"
+                >
+                  <option value="">All Messes</option>
+                  {allMesses.map(mess => (
+                    <option key={mess.mess_id} value={mess.mess_id}>
+                      {mess.name} ({mess.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* View Tabs */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6">
           <div className="flex space-x-4 mb-4">
@@ -426,6 +502,7 @@ const AdminMenuManagement = () => {
 
           {/* Filters */}
           <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
+
             {currentView === 'weekly' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
@@ -732,13 +809,13 @@ const AdminMenuManagement = () => {
                     Category
                   </label>
                   <select
-                    value={currentItem ? currentItem.category : newItem.category}
+                    value={currentItem ? (currentItem.category_id || currentItem.category) : newItem.category_id}
                     onChange={(e) => {
                       const value = e.target.value;
                       if (currentItem) {
-                        setCurrentItem({...currentItem, category: value});
+                        setCurrentItem({...currentItem, category_id: value});
                       } else {
-                        setNewItem({...newItem, category: value});
+                        setNewItem({...newItem, category_id: value});
                       }
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"

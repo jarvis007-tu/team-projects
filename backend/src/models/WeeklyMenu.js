@@ -24,24 +24,30 @@ const WeeklyMenuSchema = new mongoose.Schema({
     },
     required: [true, 'Day is required']
   },
-  meal_type: {
-    type: String,
-    enum: {
-      values: ['breakfast', 'lunch', 'snack', 'dinner'],
-      message: '{VALUE} is not a valid meal type'
-    },
-    required: [true, 'Meal type is required']
+  category_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'MenuCategory',
+    required: [true, 'Category is required'],
+    index: true
   },
-  items: {
-    type: [String],
+  menu_items: {
+    type: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MenuItem'
+    }],
     required: true,
     default: [],
     validate: {
       validator: function(value) {
         return Array.isArray(value);
       },
-      message: 'Items must be an array'
+      message: 'Menu items must be an array'
     }
+  },
+  // Keep items as legacy field for backward compatibility (can be removed later)
+  items: {
+    type: [String],
+    default: []
   },
   special_items: {
     type: [String],
@@ -94,9 +100,9 @@ const WeeklyMenuSchema = new mongoose.Schema({
 // Indexes
 WeeklyMenuSchema.index({ week_start_date: 1, week_end_date: 1 });
 WeeklyMenuSchema.index({ day: 1 });
-WeeklyMenuSchema.index({ meal_type: 1 });
+WeeklyMenuSchema.index({ category_id: 1 });
 WeeklyMenuSchema.index({ is_active: 1 });
-WeeklyMenuSchema.index({ mess_id: 1, week_start_date: 1, day: 1, meal_type: 1 }, { unique: true }); // Unique constraint per mess
+WeeklyMenuSchema.index({ mess_id: 1, week_start_date: 1, day: 1, category_id: 1 }, { unique: true }); // Unique constraint per mess
 
 // Static method to get current week menu
 WeeklyMenuSchema.statics.getCurrentWeekMenu = async function() {

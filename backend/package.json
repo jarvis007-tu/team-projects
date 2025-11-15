@@ -14,9 +14,8 @@
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.js",
     "format": "prettier --write src/**/*.js",
-    "db:seed": "node src/database/seeders/seed.js",
-    "db:seed:production": "node src/database/seeders/seed-production.js",
-    "db:seed:menu": "node scripts/seedMenu.js",
+    "db:seed": "node src/database/seeders/seedAll.js",
+    "db:seed:prod": "node src/database/seeders/seedAll.js production",
     "db:drop": "node src/database/seeders/drop.js",
     "db:verify": "node src/database/seeders/verify-setup.js"
   },

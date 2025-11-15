@@ -7,6 +7,9 @@ const User = require('./User');
 const Subscription = require('./Subscription');
 const Attendance = require('./Attendance');
 const WeeklyMenu = require('./WeeklyMenu');
+const MenuItem = require('./MenuItem');
+const MenuCategory = require('./MenuCategory');
+const MenuTemplate = require('./MenuTemplate');
 const MealConfirmation = require('./MealConfirmation');
 const Notification = require('./Notification');
 
@@ -18,6 +21,9 @@ module.exports = {
   Subscription,
   Attendance,
   WeeklyMenu,
+  MenuItem,
+  MenuCategory,
+  MenuTemplate,
   MealConfirmation,
   Notification
 };

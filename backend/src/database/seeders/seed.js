@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { connectDB, disconnectDB } = require('../../config/mongodb');
-const { Mess, User, Subscription, WeeklyMenu, Notification, Attendance, MealConfirmation } = require('../../models');
+const { Mess, User, Subscription, WeeklyMenu, MenuItem, MenuCategory, MenuTemplate, Notification, Attendance, MealConfirmation } = require('../../models');
 const moment = require('moment-timezone');
 
 // Use console.log instead of logger for seeding
@@ -21,6 +21,9 @@ async function seed() {
     await Subscription.deleteMany({});
     await Attendance.deleteMany({});
     await WeeklyMenu.deleteMany({});
+    await MenuItem.deleteMany({});
+    await MenuCategory.deleteMany({});
+    await MenuTemplate.deleteMany({});
     await Notification.deleteMany({});
     await MealConfirmation.deleteMany({});
     logger.info('Cleared existing data');
@@ -82,6 +85,122 @@ async function seed() {
     });
 
     logger.info('Created 2 sample messes');
+
+    // Create menu categories for both messes (BEFORE creating users to have created_by)
+    // We'll create a temporary ID first, then update after super admin is created
+    const tempCreatorId = new require('mongoose').Types.ObjectId();
+
+    const mess1Categories = await MenuCategory.create([
+      {
+        mess_id: mess1._id,
+        name: 'Breakfast',
+        slug: 'breakfast',
+        display_name: 'Breakfast',
+        description: 'Morning meal',
+        icon: 'MdFreeBreakfast',
+        color: 'orange',
+        sort_order: 1,
+        is_default: true,
+        is_active: true,
+        created_by: tempCreatorId
+      },
+      {
+        mess_id: mess1._id,
+        name: 'Lunch',
+        slug: 'lunch',
+        display_name: 'Lunch',
+        description: 'Afternoon meal',
+        icon: 'MdLunchDining',
+        color: 'blue',
+        sort_order: 2,
+        is_default: true,
+        is_active: true,
+        created_by: tempCreatorId
+      },
+      {
+        mess_id: mess1._id,
+        name: 'Snack',
+        slug: 'snack',
+        display_name: 'Snacks',
+        description: 'Evening snacks',
+        icon: 'MdFastfood',
+        color: 'green',
+        sort_order: 3,
+        is_default: true,
+        is_active: true,
+        created_by: tempCreatorId
+      },
+      {
+        mess_id: mess1._id,
+        name: 'Dinner',
+        slug: 'dinner',
+        display_name: 'Dinner',
+        description: 'Evening meal',
+        icon: 'MdDinnerDining',
+        color: 'purple',
+        sort_order: 4,
+        is_default: true,
+        is_active: true,
+        created_by: tempCreatorId
+      }
+    ]);
+
+    const mess2Categories = await MenuCategory.create([
+      {
+        mess_id: mess2._id,
+        name: 'Breakfast',
+        slug: 'breakfast',
+        display_name: 'Breakfast',
+        description: 'Morning meal',
+        icon: 'MdFreeBreakfast',
+        color: 'orange',
+        sort_order: 1,
+        is_default: true,
+        is_active: true,
+        created_by: tempCreatorId
+      },
+      {
+        mess_id: mess2._id,
+        name: 'Lunch',
+        slug: 'lunch',
+        display_name: 'Lunch',
+        description: 'Afternoon meal',
+        icon: 'MdLunchDining',
+        color: 'blue',
+        sort_order: 2,
+        is_default: true,
+        is_active: true,
+        created_by: tempCreatorId
+      },
+      {
+        mess_id: mess2._id,
+        name: 'Snack',
+        slug: 'snack',
+        display_name: 'Snacks',
+        description: 'Evening snacks',
+        icon: 'MdFastfood',
+        color: 'green',
+        sort_order: 3,
+        is_default: true,
+        is_active: true,
+        created_by: tempCreatorId
+      },
+      {
+        mess_id: mess2._id,
+        name: 'Dinner',
+        slug: 'dinner',
+        display_name: 'Dinner',
+        description: 'Evening meal',
+        icon: 'MdDinnerDining',
+        color: 'purple',
+        sort_order: 4,
+        is_default: true,
+        is_active: true,
+        created_by: tempCreatorId
+      }
+    ]);
+
+    logger.info('Created menu categories for both messes');
 
     // Create super admin user (can manage all messes)
     const superAdmin = await User.create({
@@ -224,20 +343,32 @@ async function seed() {
       ]
     };
 
-    // Create menus for both messes
+    // Create menus for both messes with new category structure
     for (const mess of [mess1, mess2]) {
+      const messCategories = mess._id.toString() === mess1._id.toString() ? mess1Categories : mess2Categories;
+      const messAdmin = mess._id.toString() === mess1._id.toString() ? messAdmin1 : messAdmin2;
+
       for (const day of days) {
         for (let mIndex = 0; mIndex < mealTypes.length; mIndex++) {
           const mealType = mealTypes[mIndex];
           const dayIndex = days.indexOf(day);
+
+          // Find the matching category
+          const category = messCategories.find(cat => cat.slug === mealType);
+
+          if (!category) {
+            logger.error(`Category not found for ${mealType}`);
+            continue;
+          }
 
           await WeeklyMenu.create({
             mess_id: mess._id,
             week_start_date: weekStart,
             week_end_date: weekEnd,
             day: day,
-            meal_type: mealType,
-            items: menuItems[mealType][dayIndex],
+            category_id: category._id,
+            menu_items: [], // Empty for now - will be populated when menu items are created
+            items: menuItems[mealType][dayIndex], // Legacy field
             special_items: dayIndex % 2 === 0 ? ['Dessert'] : [],
             nutritional_info: {
               calories: mealType === 'breakfast' ? 400 : mealType === 'lunch' ? 600 : 500,
@@ -249,14 +380,14 @@ async function seed() {
             is_veg: dayIndex !== 5, // Friday is non-veg
             allergen_info: dayIndex % 3 === 0 ? ['nuts', 'dairy'] : [],
             price: mealType === 'breakfast' ? 20 : mealType === 'lunch' ? 40 : 30,
-            created_by: mess._id.toString() === mess1._id.toString() ? messAdmin1._id : messAdmin2._id,
+            created_by: messAdmin._id,
             is_active: true,
             notes: `Weekly menu for ${mess.name} - ${day} ${mealType}`
           });
         }
       }
     }
-    logger.info('Created weekly menus for both messes');
+    logger.info('Created weekly menus for both messes with category structure');
 
     // Create sample notifications
     for (let i = 0; i < users.length; i++) {

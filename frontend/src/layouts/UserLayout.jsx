@@ -31,7 +31,7 @@ const UserLayout = () => {
     { name: 'Weekly Menu', href: '/user/menu', icon: CalendarDaysIcon },
     { name: 'QR Scanner', href: '/user/scan', icon: QrCodeIcon },
     { name: 'Notifications', href: '/user/notifications', icon: BellIcon },
-    { name: 'Settings', href: '/user/settings', icon: Cog6ToothIcon },
+    // { name: 'Settings', href: '/user/settings', icon: Cog6ToothIcon },
   ];
 
   const handleLogout = async () => {

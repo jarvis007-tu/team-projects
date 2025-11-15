@@ -532,14 +532,29 @@ async function seedDevelopment() {
     logger.info(`Created ${Object.values(createdMenuItems[messName]).flat().length} menu items for ${messName}`);
   }
 
-  // Create weekly menu
+  // Create weekly menu for current week and next week
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
   const mealTypes = ['breakfast', 'lunch', 'dinner'];
-  const weekStart = moment().startOf('week').add(1, 'day').toDate();
-  const weekEnd = moment(weekStart).add(6, 'days').toDate();
 
-  // Create menus for both messes
-  for (const mess of [mess1, mess2]) {
+  // Create menus for current week AND next week
+  // Use isoWeek to start from Monday
+  const weeks = [
+    {
+      start: moment().startOf('isoWeek').toDate(), // Current week Monday (ISO week starts Monday)
+      end: moment().endOf('isoWeek').toDate()       // Current week Sunday
+    },
+    {
+      start: moment().add(1, 'week').startOf('isoWeek').toDate(), // Next week Monday
+      end: moment().add(1, 'week').endOf('isoWeek').toDate()      // Next week Sunday
+    }
+  ];
+
+  for (const week of weeks) {
+    const weekStart = week.start;
+    const weekEnd = week.end;
+
+    // Create menus for both messes
+    for (const mess of [mess1, mess2]) {
     const messName = mess.name;
     const messCategories = mess._id.toString() === mess1._id.toString() ? mess1Categories : mess2Categories;
     const messAdmin = mess._id.toString() === mess1._id.toString() ? messAdmin1 : messAdmin2;
@@ -591,8 +606,9 @@ async function seedDevelopment() {
         });
       }
     }
+    }
   }
-  logger.info('Created weekly menus for both messes');
+  logger.info('Created weekly menus for both messes (current week + next week)');
 
   // Create notifications
   for (let i = 0; i < users.length; i++) {

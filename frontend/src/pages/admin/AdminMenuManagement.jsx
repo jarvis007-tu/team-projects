@@ -407,10 +407,30 @@ const AdminMenuManagement = () => {
 
   const handleSaveWeeklyMenu = async () => {
     try {
+      // Clean up the menu data before sending - remove empty special_notes and format properly
+      const cleanedMenu = {};
+
+      Object.keys(weeklyMenu).forEach(day => {
+        cleanedMenu[day] = {};
+        Object.keys(weeklyMenu[day]).forEach(mealType => {
+          const mealData = weeklyMenu[day][mealType];
+
+          // Only include fields that the backend expects
+          cleanedMenu[day][mealType] = {
+            items: mealData.items || []
+          };
+
+          // Only include special_note if it's not empty
+          if (mealData.special_note && mealData.special_note.trim() !== '') {
+            cleanedMenu[day][mealType].special_note = mealData.special_note;
+          }
+        });
+      });
+
       // Call backend API to persist changes
       const messId = user?.role === 'super_admin' ? selectedMessId : null;
       await menuService.updateWeeklyMenu({
-        menu: weeklyMenu,
+        menu: cleanedMenu,
         week_start_date: selectedWeek,
         ...(messId && { mess_id: messId })
       });

@@ -784,10 +784,12 @@ class AttendanceController {
   // Get attendance analytics
   async getAttendanceAnalytics(req, res) {
     try {
-      const { start_date, end_date, group_by = 'day' } = req.query;
+      const { start_date, end_date, date, group_by = 'day' } = req.query;
 
-      const startDate = start_date ? moment(start_date) : moment().subtract(30, 'days');
-      const endDate = end_date ? moment(end_date) : moment();
+      // If date parameter is provided, use it for today's stats
+      const targetDate = date ? moment(date) : moment();
+      const startDate = start_date ? moment(start_date) : targetDate.clone().startOf('day');
+      const endDate = end_date ? moment(end_date) : targetDate.clone().endOf('day');
 
       // Build match filter with mess context
       const matchFilter = {
@@ -820,14 +822,15 @@ class AttendanceController {
         }
       ]);
 
-      // Calculate averages
-      const totalDays = endDate.diff(startDate, 'days') + 1;
+      // Calculate totals for today
       const mealCounts = { breakfast: 0, lunch: 0, dinner: 0 };
+      let totalPresent = 0;
 
       const formattedAttendance = attendance.map(record => {
         const mealType = record._id.meal_type;
         const count = record.count;
         mealCounts[mealType] = (mealCounts[mealType] || 0) + count;
+        totalPresent += count;
 
         return {
           meal_type: mealType,
@@ -836,18 +839,35 @@ class AttendanceController {
         };
       });
 
+      // Get total active users/subscribers for the mess to calculate attendance rate
+      const User = require('../models/User');
+      const userFilter = { status: 'active', role: 'subscriber' };
+      if (req.messContext?.mess_id) {
+        userFilter.mess_id = req.messContext.mess_id;
+      }
+      const totalActiveUsers = await User.countDocuments(userFilter);
+
+      // Calculate attendance rate (present / total active users * 100)
+      const attendanceRate = totalActiveUsers > 0
+        ? ((totalPresent / totalActiveUsers) * 100).toFixed(1)
+        : 0;
+
+      // For now, absent and late are not tracked in the model, so they're 0
       const analytics = {
+        totalPresent: totalPresent,
+        totalAbsent: 0, // Not tracked in current model
+        attendanceRate: parseFloat(attendanceRate),
+        lateArrivals: 0, // Not tracked in current model
+        presentChange: '+0%', // Can be calculated if needed
+        absentChange: '+0%',
+        rateChange: '+0%',
+        lateChange: '+0%',
         period: {
           start: startDate.format('YYYY-MM-DD'),
           end: endDate.format('YYYY-MM-DD'),
-          days: totalDays
+          days: endDate.diff(startDate, 'days') + 1
         },
         totals: mealCounts,
-        averages: {
-          breakfast: (mealCounts.breakfast / totalDays).toFixed(2),
-          lunch: (mealCounts.lunch / totalDays).toFixed(2),
-          dinner: (mealCounts.dinner / totalDays).toFixed(2)
-        },
         daily: formattedAttendance
       };
 

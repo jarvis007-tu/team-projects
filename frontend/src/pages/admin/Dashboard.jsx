@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   UsersIcon,
   CreditCardIcon,
@@ -37,6 +38,7 @@ import dashboardService from '../../services/dashboardService';
 import { format } from 'date-fns';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [recentActivity, setRecentActivity] = useState([]);
@@ -239,7 +241,10 @@ const Dashboard = () => {
             >
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
-                <button className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium">
+                <button
+                  onClick={() => navigate('/admin/notifications')}
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors"
+                >
                   View All
                 </button>
               </div>
@@ -283,7 +288,13 @@ const Dashboard = () => {
             >
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Attendance Records</h3>
-                <EyeIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                <button
+                  onClick={() => navigate('/admin/attendance')}
+                  className="text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  title="View all attendance records"
+                >
+                  <EyeIcon className="h-5 w-5" />
+                </button>
               </div>
               <div className="space-y-4">
                 <div className="border-b border-gray-100 dark:border-gray-700 pb-4">
@@ -368,14 +379,26 @@ const Dashboard = () => {
                       <DocumentTextIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
                       <span className="text-sm text-gray-900 dark:text-white">Weekly Report</span>
                     </div>
-                    <button className="text-xs text-blue-600 dark:text-blue-400 font-medium">Download</button>
+                    <button
+                      disabled
+                      className="text-xs text-gray-400 dark:text-gray-600 font-medium cursor-not-allowed opacity-50"
+                      title="Coming soon"
+                    >
+                      Download
+                    </button>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                     <div className="flex items-center space-x-3">
                       <DocumentTextIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
                       <span className="text-sm text-gray-900 dark:text-white">Monthly Report</span>
                     </div>
-                    <button className="text-xs text-blue-600 dark:text-blue-400 font-medium">Download</button>
+                    <button
+                      disabled
+                      className="text-xs text-gray-400 dark:text-gray-600 font-medium cursor-not-allowed opacity-50"
+                      title="Coming soon"
+                    >
+                      Download
+                    </button>
                   </div>
                 </div>
               </div>

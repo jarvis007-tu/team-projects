@@ -52,7 +52,6 @@ class MessController {
     try {
       const {
         name,
-        code,
         address,
         city,
         state,
@@ -68,19 +67,35 @@ class MessController {
         image_url
       } = req.body;
 
-      // Check if mess code already exists
-      const existingMess = await Mess.findOne({ code: code.toUpperCase() });
-      if (existingMess) {
-        return res.status(400).json({
-          success: false,
-          message: 'Mess code already exists'
-        });
-      }
+      // Auto-generate unique mess code from name
+      const generateMessCode = async (messName) => {
+        // Extract first letters of words (max 4) and convert to uppercase
+        const words = messName.trim().split(/\s+/);
+        const prefix = words
+          .slice(0, Math.min(4, words.length))
+          .map(word => word.charAt(0))
+          .join('')
+          .toUpperCase();
+
+        // Find existing codes with same prefix to generate unique suffix
+        const existingCodes = await Mess.find({
+          code: new RegExp(`^${prefix}-`, 'i')
+        }).select('code');
+
+        const maxSuffix = existingCodes.reduce((max, mess) => {
+          const match = mess.code.match(/-(\d+)$/);
+          return match ? Math.max(max, parseInt(match[1])) : max;
+        }, 0);
+
+        return `${prefix}-${String(maxSuffix + 1).padStart(3, '0')}`;
+      };
+
+      const generatedCode = await generateMessCode(name);
 
       // Create new mess
       const mess = await Mess.create({
         name,
-        code: code.toUpperCase(),
+        code: generatedCode,
         address,
         city,
         state,

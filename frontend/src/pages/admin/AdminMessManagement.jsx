@@ -96,6 +96,11 @@ const AdminMessManagement = () => {
         capacity: parseInt(formData.capacity)
       };
 
+      // Remove code field when creating new mess (it's auto-generated in backend)
+      if (!isEdit) {
+        delete messData.code;
+      }
+
       let response;
       if (isEdit) {
         response = await messService.updateMess(selectedMess.mess_id || selectedMess._id, messData);
@@ -399,21 +404,23 @@ const AdminMessManagement = () => {
                         required
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                        Mess Code <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        name="code"
-                        value={formData.code}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all uppercase font-mono"
-                        placeholder="e.g., MESS-A"
-                        required
-                        disabled={isEdit}
-                      />
-                    </div>
+                    {isEdit && (
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                          Mess Code
+                        </label>
+                        <input
+                          type="text"
+                          name="code"
+                          value={formData.code}
+                          className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl dark:text-white transition-all uppercase font-mono cursor-not-allowed"
+                          disabled
+                        />
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Mess code is auto-generated and cannot be changed
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Address */}

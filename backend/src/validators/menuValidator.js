@@ -27,11 +27,12 @@ const validateWeeklyMenu = (req, res, next) => {
         Joi.string().valid('breakfast', 'lunch', 'dinner'),
         Joi.object({
           items: Joi.array().items(Joi.string()).min(1).required(),
-          special_note: Joi.string().max(500).optional()
+          special_note: Joi.string().max(500).allow('').optional()
         })
       )
     ).required(),
-    week_start_date: Joi.date().iso().optional()
+    week_start_date: Joi.date().iso().optional(),
+    mess_id: Joi.string().optional()
   });
 
   const { error } = schema.validate(req.body);

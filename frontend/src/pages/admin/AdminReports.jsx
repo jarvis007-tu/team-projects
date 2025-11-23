@@ -265,6 +265,24 @@ const AdminReports = () => {
     const totalAttendance = reportData?.attendance?.totalThisMonth || reportData?.mealsServed || 0;
     const monthlyRevenue = reportData?.subscriptions?.monthlyRevenue || reportData?.totalRevenue || 0;
 
+    // Format date range for display
+    const formatDateRange = () => {
+      const start = new Date(dateRange.startDate);
+      const end = new Date(dateRange.endDate);
+
+      const formatOptions = { month: 'short', day: 'numeric' };
+      const startFormatted = start.toLocaleDateString('en-US', formatOptions);
+      const endFormatted = end.toLocaleDateString('en-US', formatOptions);
+
+      // If same year, show: "Jan 1 - Jan 31"
+      // If different years, show: "Dec 25, 2023 - Jan 5, 2024"
+      if (start.getFullYear() === end.getFullYear()) {
+        return `${startFormatted} - ${endFormatted}, ${start.getFullYear()}`;
+      } else {
+        return `${startFormatted}, ${start.getFullYear()} - ${endFormatted}, ${end.getFullYear()}`;
+      }
+    };
+
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
@@ -272,7 +290,7 @@ const AdminReports = () => {
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Revenue</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">₹{monthlyRevenue.toLocaleString()}</p>
-              <p className="text-sm text-gray-500 mt-1">This month</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{formatDateRange()}</p>
             </div>
             <FiDollarSign className="w-8 h-8 text-green-500" />
           </div>
@@ -292,7 +310,7 @@ const AdminReports = () => {
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Avg Attendance</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">{avgAttendance}</p>
-              <p className="text-sm text-gray-500 mt-1">Meals per user this month</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Meals per user in period</p>
             </div>
             <FiBarChart2 className="w-8 h-8 text-purple-500" />
           </div>

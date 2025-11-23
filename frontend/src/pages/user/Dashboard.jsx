@@ -12,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
+import dashboardService from '../../services/dashboardService';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -30,47 +31,44 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      // Simulated API call - replace with actual service
-      // const response = await userDashboardService.getDashboard();
-      
-      // Mock data for development
-      const mockData = {
-        subscription: {
-          plan_type: 'Premium',
-          end_date: '2024-09-30',
-          status: 'active',
-          days_remaining: 28
-        },
-        todayMenu: {
-          breakfast: ['Idli', 'Sambar', 'Coconut Chutney', 'Coffee'],
-          lunch: ['Rice', 'Dal', 'Vegetable Curry', 'Rasam'],
-          dinner: ['Chapati', 'Paneer Curry', 'Dal', 'Salad']
-        },
-        weeklyAttendance: [
-          { day: 'Mon', breakfast: true, lunch: true, dinner: false },
-          { day: 'Tue', breakfast: true, lunch: false, dinner: true },
-          { day: 'Wed', breakfast: false, lunch: true, dinner: true },
-          { day: 'Thu', breakfast: true, lunch: true, dinner: true },
-          { day: 'Fri', breakfast: true, lunch: false, dinner: false },
-          { day: 'Sat', breakfast: false, lunch: false, dinner: false },
-          { day: 'Sun', breakfast: false, lunch: false, dinner: false }
-        ],
-        recentNotifications: [
-          { id: 1, title: 'Menu Updated', message: 'New items added to this week\'s menu', time: '2 hours ago', read: false },
-          { id: 2, title: 'Payment Due', message: 'Your subscription expires in 7 days', time: '1 day ago', read: false },
-          { id: 3, title: 'Meal Reminder', message: 'Don\'t forget to mark your dinner attendance', time: '2 days ago', read: true }
-        ],
+      // Fetch real data from backend
+      const response = await dashboardService.getUserDashboard();
+
+      // Handle different response structures
+      const data = response.data?.data || response.data || {};
+
+      // Calculate days remaining for subscription
+      const daysRemaining = data.subscription ?
+        Math.ceil((new Date(data.subscription.end_date) - new Date()) / (1000 * 60 * 60 * 24)) : 0;
+
+      // Format data to match component structure
+      const formattedData = {
+        subscription: data.subscription ? {
+          ...data.subscription,
+          days_remaining: daysRemaining
+        } : null,
+        todayMenu: data.todayMenu || {},
+        weeklyAttendance: [], // Will be calculated from recentAttendance
+        recentNotifications: data.notifications || [],
         upcomingMeals: [
           { type: 'Dinner', time: '7:00 PM - 9:00 PM', status: 'upcoming' },
           { type: 'Breakfast', time: '7:00 AM - 9:30 AM', status: 'tomorrow' },
           { type: 'Lunch', time: '12:00 PM - 2:30 PM', status: 'tomorrow' }
         ]
       };
-      
-      setDashboardData(mockData);
+
+      setDashboardData(formattedData);
     } catch (error) {
       toast.error('Failed to load dashboard data');
       console.error('Dashboard data fetch error:', error);
+      // Set empty data on error
+      setDashboardData({
+        subscription: null,
+        todayMenu: null,
+        weeklyAttendance: [],
+        recentNotifications: [],
+        upcomingMeals: []
+      });
     } finally {
       setLoading(false);
     }

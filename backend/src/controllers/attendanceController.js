@@ -584,6 +584,11 @@ class AttendanceController {
 
       const filter = {};
 
+      // Add mess filtering based on user role
+      if (req.messContext?.mess_id) {
+        filter.mess_id = req.messContext.mess_id;
+      }
+
       if (date) {
         const targetDate = moment(date);
         filter.scan_time = {
@@ -784,14 +789,22 @@ class AttendanceController {
       const startDate = start_date ? moment(start_date) : moment().subtract(30, 'days');
       const endDate = end_date ? moment(end_date) : moment();
 
+      // Build match filter with mess context
+      const matchFilter = {
+        scan_time: {
+          $gte: startDate.toDate(),
+          $lte: endDate.toDate()
+        }
+      };
+
+      // Add mess filtering
+      if (req.messContext?.mess_id) {
+        matchFilter.mess_id = req.messContext.mess_id;
+      }
+
       const attendance = await Attendance.aggregate([
         {
-          $match: {
-            scan_time: {
-              $gte: startDate.toDate(),
-              $lte: endDate.toDate()
-            }
-          }
+          $match: matchFilter
         },
         {
           $group: {
@@ -906,14 +919,22 @@ class AttendanceController {
       const startDate = start_date ? moment(start_date) : moment().startOf('month');
       const endDate = end_date ? moment(end_date) : moment().endOf('month');
 
+      // Build match filter with mess context
+      const matchFilter = {
+        scan_time: {
+          $gte: startDate.toDate(),
+          $lte: endDate.toDate()
+        }
+      };
+
+      // Add mess filtering
+      if (req.messContext?.mess_id) {
+        matchFilter.mess_id = req.messContext.mess_id;
+      }
+
       const attendance = await Attendance.aggregate([
         {
-          $match: {
-            scan_time: {
-              $gte: startDate.toDate(),
-              $lte: endDate.toDate()
-            }
-          }
+          $match: matchFilter
         },
         {
           $group: {
@@ -986,13 +1007,21 @@ class AttendanceController {
           groupInterval = 'day';
       }
 
+      // Build match filter with mess context
+      const matchFilter = {
+        scan_time: {
+          $gte: startDate.toDate()
+        }
+      };
+
+      // Add mess filtering
+      if (req.messContext?.mess_id) {
+        matchFilter.mess_id = req.messContext.mess_id;
+      }
+
       const attendance = await Attendance.aggregate([
         {
-          $match: {
-            scan_time: {
-              $gte: startDate.toDate()
-            }
-          }
+          $match: matchFilter
         },
         {
           $group: {

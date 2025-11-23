@@ -7,21 +7,40 @@ class DashboardController {
     try {
       const today = moment().startOf('day');
       const thisMonth = moment().startOf('month');
-      const messId = req.messContext?.messId;
+      const lastMonth = moment().subtract(1, 'month').startOf('month');
 
       // Build query filter based on mess context
-      const messFilter = messId ? { mess_id: messId } : {};
+      // Super admin without mess_id: see all data (messFilter = {})
+      // Super admin with mess_id OR mess_admin: see only their mess data
+      const messFilter = {};
+      if (req.messContext?.mess_id) {
+        messFilter.mess_id = req.messContext.mess_id;
+      }
 
-      // Get user statistics
+      // Get user statistics with growth
       const totalUsers = await User.countDocuments(messFilter);
       const activeUsers = await User.countDocuments({ ...messFilter, status: 'active' });
+      const lastMonthUsers = await User.countDocuments({
+        ...messFilter,
+        createdAt: { $lt: thisMonth.toDate() }
+      });
+      const userGrowth = lastMonthUsers > 0 ?
+        (((totalUsers - lastMonthUsers) / lastMonthUsers) * 100).toFixed(2) : 0;
 
-      // Get subscription statistics
+      // Get subscription statistics with growth
       const activeSubscriptions = await Subscription.countDocuments({
         ...messFilter,
         status: 'active',
         end_date: { $gte: today.toDate() }
       });
+
+      const lastMonthSubscriptions = await Subscription.countDocuments({
+        ...messFilter,
+        status: 'active',
+        createdAt: { $lt: thisMonth.toDate() }
+      });
+      const subscriptionGrowth = lastMonthSubscriptions > 0 ?
+        (((activeSubscriptions - lastMonthSubscriptions) / lastMonthSubscriptions) * 100).toFixed(2) : 0;
 
       const expiringSoon = await Subscription.countDocuments({
         ...messFilter,
@@ -32,7 +51,7 @@ class DashboardController {
         }
       });
 
-      // Get subscription type counts (NEW FEATURE)
+      // Get subscription type counts
       const subTypeStats = await Subscription.aggregate([
         {
           $match: {
@@ -61,7 +80,7 @@ class DashboardController {
         }
       });
 
-      // Get today's attendance
+      // Get today's attendance with growth
       const todayAttendance = await Attendance.countDocuments({
         ...messFilter,
         scan_time: {
@@ -70,13 +89,26 @@ class DashboardController {
         }
       });
 
-      // Calculate actual revenue from active subscriptions
-      const revenueResult = await Subscription.aggregate([
+      const yesterdayAttendance = await Attendance.countDocuments({
+        ...messFilter,
+        scan_time: {
+          $gte: moment().subtract(1, 'day').startOf('day').toDate(),
+          $lte: moment().subtract(1, 'day').endOf('day').toDate()
+        }
+      });
+      const attendanceGrowth = yesterdayAttendance > 0 ?
+        (((todayAttendance - yesterdayAttendance) / yesterdayAttendance) * 100).toFixed(2) : 0;
+
+      // Calculate monthly revenue with growth
+      const currentMonthRevenue = await Subscription.aggregate([
         {
           $match: {
             ...messFilter,
-            status: 'active',
-            end_date: { $gte: today.toDate() }
+            payment_status: 'paid',
+            createdAt: {
+              $gte: thisMonth.toDate(),
+              $lte: moment().endOf('month').toDate()
+            }
           }
         },
         {
@@ -87,7 +119,29 @@ class DashboardController {
         }
       ]);
 
-      const monthlyRevenue = revenueResult[0]?.total || 0;
+      const lastMonthRevenue = await Subscription.aggregate([
+        {
+          $match: {
+            ...messFilter,
+            payment_status: 'paid',
+            createdAt: {
+              $gte: lastMonth.toDate(),
+              $lte: moment(lastMonth).endOf('month').toDate()
+            }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' }
+          }
+        }
+      ]);
+
+      const monthlyRevenue = currentMonthRevenue[0]?.total || 0;
+      const prevMonthRevenue = lastMonthRevenue[0]?.total || 0;
+      const revenueGrowth = prevMonthRevenue > 0 ?
+        (((monthlyRevenue - prevMonthRevenue) / prevMonthRevenue) * 100).toFixed(2) : 0;
 
       res.json({
         success: true,
@@ -95,7 +149,8 @@ class DashboardController {
           users: {
             total: totalUsers,
             active: activeUsers,
-            inactive: totalUsers - activeUsers
+            inactive: totalUsers - activeUsers,
+            growth: parseFloat(userGrowth)
           },
           subscriptions: {
             active: activeSubscriptions,
@@ -105,7 +160,8 @@ class DashboardController {
               status: 'expired',
               end_date: { $lt: today.toDate() }
             }),
-            byType: subTypeCounts // NEW: Subscription type breakdown
+            byType: subTypeCounts,
+            growth: parseFloat(subscriptionGrowth)
           },
           attendance: {
             today: todayAttendance,
@@ -115,11 +171,13 @@ class DashboardController {
                 $gte: moment().startOf('week').toDate(),
                 $lte: moment().endOf('week').toDate()
               }
-            })
+            }),
+            growth: parseFloat(attendanceGrowth)
           },
           revenue: {
             monthly: monthlyRevenue,
-            total: monthlyRevenue * 12 // Annual projection
+            total: monthlyRevenue * 12,
+            growth: parseFloat(revenueGrowth)
           }
         }
       });
@@ -829,7 +887,7 @@ class DashboardController {
       ]);
 
       const monthlyRevenue = revenueResult[0]?.total || 0;
-      
+
       res.json({
         success: true,
         data: {
@@ -844,6 +902,90 @@ class DashboardController {
       res.status(500).json({
         success: false,
         message: 'Failed to fetch quick statistics'
+      });
+    }
+  }
+
+  // User/Subscriber dashboard
+  async getUserDashboard(req, res) {
+    try {
+      const userId = req.user._id || req.user.user_id;
+      const today = moment().startOf('day');
+      const todayEnd = moment().endOf('day');
+
+      // Get active subscription
+      const subscription = await Subscription.findOne({
+        user_id: userId,
+        status: 'active',
+        end_date: { $gte: today.toDate() }
+      })
+        .populate('mess_id', 'name address')
+        .lean();
+
+      // Get today's menu
+      const dayOfWeek = moment().format('dddd').toLowerCase();
+      const todayMenu = await WeeklyMenu.findOne({
+        mess_id: req.user.mess_id,
+        day: dayOfWeek,
+        is_active: true
+      })
+        .populate('category_id', 'name')
+        .populate('menu_items', 'name description is_veg')
+        .lean();
+
+      // Format menu
+      const formattedMenu = todayMenu ? {
+        breakfast: {
+          items: todayMenu.breakfast_items || [],
+          nutritional_info: todayMenu.breakfast_nutritional_info || {}
+        },
+        lunch: {
+          items: todayMenu.lunch_items || [],
+          nutritional_info: todayMenu.lunch_nutritional_info || {}
+        },
+        dinner: {
+          items: todayMenu.dinner_items || [],
+          nutritional_info: todayMenu.dinner_nutritional_info || {}
+        }
+      } : null;
+
+      // Get recent attendance (last 5 records)
+      const recentAttendance = await Attendance.find({
+        user_id: userId
+      })
+        .sort({ scan_time: -1 })
+        .limit(5)
+        .select('meal_type scan_date scan_time is_valid')
+        .lean();
+
+      // Get unread notifications
+      const { Notification } = require('../models');
+      const notifications = await Notification.find({
+        $or: [
+          { user_id: userId },
+          { user_id: null, mess_id: req.user.mess_id }, // Mess-wide notifications
+          { user_id: null, mess_id: null } // System-wide notifications
+        ],
+        is_read: false
+      })
+        .sort({ created_at: -1 })
+        .limit(5)
+        .lean();
+
+      res.json({
+        success: true,
+        data: {
+          subscription,
+          todayMenu: formattedMenu,
+          recentAttendance,
+          notifications
+        }
+      });
+    } catch (error) {
+      logger.error('Error fetching user dashboard:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch user dashboard data'
       });
     }
   }

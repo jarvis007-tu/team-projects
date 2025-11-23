@@ -42,6 +42,7 @@ const Dashboard = () => {
   const [recentActivity, setRecentActivity] = useState([]);
   const [attendanceData, setAttendanceData] = useState([]);
   const [subscriptionData, setSubscriptionData] = useState([]);
+  const [todayAttendance, setTodayAttendance] = useState(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -50,19 +51,21 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch real data from API
-      const [statsRes, activityRes, attendanceRes, subscriptionRes] = await Promise.all([
+      const [statsRes, activityRes, attendanceRes, subscriptionRes, todayAttendanceRes] = await Promise.all([
         dashboardService.getStats(),
         dashboardService.getRecentActivity(),
         dashboardService.getAttendanceStats(),
-        dashboardService.getSubscriptionStats()
+        dashboardService.getSubscriptionStats(),
+        dashboardService.getTodayAttendance()
       ]);
 
       setStats(statsRes.data);
       setRecentActivity(activityRes.data);
-      setAttendanceData(attendanceRes.data);
-      setSubscriptionData(subscriptionRes.data);
+      setAttendanceData(attendanceRes.data.chartData || []);
+      setSubscriptionData(subscriptionRes.data.planDistribution || []);
+      setTodayAttendance(todayAttendanceRes.data.summary);
     } catch (error) {
       // Log error silently in production
       if (process.env.NODE_ENV === 'development') {
@@ -71,14 +74,15 @@ const Dashboard = () => {
       }
       // Set default data on error to prevent empty dashboard
       setStats({
-        totalUsers: 0,
-        activeSubscriptions: 0,
-        monthlyRevenue: '0',
-        todayAttendance: 0
+        users: { total: 0, growth: 0 },
+        subscriptions: { active: 0, growth: 0 },
+        attendance: { today: 0, growth: 0 },
+        revenue: { monthly: 0, growth: 0 }
       });
       setRecentActivity([]);
       setAttendanceData([]);
       setSubscriptionData([]);
+      setTodayAttendance({ breakfast: 0, lunch: 0, dinner: 0, total: 0 });
     } finally {
       setLoading(false);
     }
@@ -88,68 +92,77 @@ const Dashboard = () => {
     return <LoadingSpinner fullScreen message="Loading dashboard..." />;
   }
 
+  // Helper function to format growth percentage
+  const formatGrowth = (growth) => {
+    if (!growth || growth === 0) return '0%';
+    const sign = growth > 0 ? '+' : '';
+    return `${sign}${Number(growth).toFixed(1)}%`;
+  };
+
   const overviewStats = {
-    activeSubscriptions: stats?.activeSubscriptions || 180,
-    monthlyRevenue: stats?.monthlyRevenue || '35,500'
+    activeSubscriptions: stats?.subscriptions?.active || 0,
+    monthlyRevenue: stats?.revenue?.monthly || 0
   };
 
   const statCards = [
     {
       title: 'Total Users',
-      value: stats?.totalUsers || 250,
-      change: '+12%',
-      trend: 'up',
+      value: stats?.users?.total || 0,
+      change: formatGrowth(stats?.users?.growth || 0),
+      trend: (stats?.users?.growth || 0) >= 0 ? 'up' : 'down',
       icon: UserGroupIcon,
       bgColor: 'bg-blue-50 dark:bg-blue-900/30',
       iconColor: 'text-blue-600 dark:text-blue-400',
-      changeColor: 'text-green-600 dark:text-green-400'
+      changeColor: (stats?.users?.growth || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
     },
     {
       title: 'Subscriptions',
-      value: stats?.activeSubscriptions || 180,
-      change: '+8%',
-      trend: 'up',
+      value: stats?.subscriptions?.active || 0,
+      change: formatGrowth(stats?.subscriptions?.growth || 0),
+      trend: (stats?.subscriptions?.growth || 0) >= 0 ? 'up' : 'down',
       icon: CreditCardIcon,
       bgColor: 'bg-green-50 dark:bg-green-900/30',
       iconColor: 'text-green-600 dark:text-green-400',
-      changeColor: 'text-green-600 dark:text-green-400'
+      changeColor: (stats?.subscriptions?.growth || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
     },
     {
       title: 'Attendance Logs',
-      value: stats?.todayAttendance || 150,
-      change: '-2%',
-      trend: 'down',
+      value: stats?.attendance?.today || 0,
+      change: formatGrowth(stats?.attendance?.growth || 0),
+      trend: (stats?.attendance?.growth || 0) >= 0 ? 'up' : 'down',
       icon: ClipboardDocumentListIcon,
       bgColor: 'bg-orange-50 dark:bg-orange-900/30',
       iconColor: 'text-orange-600 dark:text-orange-400',
-      changeColor: 'text-red-600 dark:text-red-400'
+      changeColor: (stats?.attendance?.growth || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
     }
   ];
 
-  // Mock data for charts
-  const attendanceChartData = attendanceData.length ? attendanceData : [
-    { day: 'Mon', breakfast: 120, lunch: 150, dinner: 140 },
-    { day: 'Tue', breakfast: 130, lunch: 160, dinner: 145 },
-    { day: 'Wed', breakfast: 125, lunch: 155, dinner: 142 },
-    { day: 'Thu', breakfast: 135, lunch: 165, dinner: 150 },
-    { day: 'Fri', breakfast: 128, lunch: 158, dinner: 146 },
-    { day: 'Sat', breakfast: 115, lunch: 145, dinner: 135 },
-    { day: 'Sun', breakfast: 110, lunch: 140, dinner: 130 }
-  ];
+  // Format attendance chart data
+  const attendanceChartData = attendanceData.length ? attendanceData.map(item => ({
+    day: format(new Date(item.date), 'EEE'),
+    breakfast: item.breakfast || 0,
+    lunch: item.lunch || 0,
+    dinner: item.dinner || 0
+  })) : [];
 
-  const subscriptionPieData = subscriptionData.length ? subscriptionData : [
-    { name: 'Monthly', value: 120, color: '#10b981' },
-    { name: 'Weekly', value: 45, color: '#3b82f6' },
-    { name: 'Daily', value: 15, color: '#f59e0b' }
-  ];
+  // Format subscription data for pie chart
+  const subscriptionPieData = subscriptionData.length ? subscriptionData.map((sub, index) => {
+    const colors = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444'];
+    return {
+      name: sub._id || 'Unknown',
+      value: sub.count,
+      color: colors[index % colors.length]
+    };
+  }) : [];
 
-  const recentActivityData = recentActivity.length ? recentActivity : [
-    { id: 1, user: 'John Doe', action: 'Scanned QR for lunch', time: '2 mins ago', status: 'success' },
-    { id: 2, user: 'Jane Smith', action: 'Subscription renewed', time: '15 mins ago', status: 'success' },
-    { id: 3, user: 'Mike Johnson', action: 'Failed QR scan attempt', time: '1 hour ago', status: 'error' },
-    { id: 4, user: 'Sarah Williams', action: 'New registration', time: '2 hours ago', status: 'success' },
-    { id: 5, user: 'Admin', action: 'Updated weekly menu', time: '3 hours ago', status: 'info' }
-  ];
+  // Format recent activity data
+  const recentActivityData = recentActivity.length ? recentActivity.map((activity, index) => ({
+    id: index + 1,
+    user: activity.user,
+    action: activity.message,
+    time: format(new Date(activity.timestamp), 'PPp'),
+    status: activity.type === 'attendance' ? 'success' : activity.type === 'subscription' ? 'info' : 'success'
+  })) : [];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
@@ -276,28 +289,43 @@ const Dashboard = () => {
                 <div className="border-b border-gray-100 dark:border-gray-700 pb-4">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-medium text-gray-900 dark:text-white">Today's Breakfast</span>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-white">120</span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">{todayAttendance?.breakfast || 0}</span>
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full" style={{ width: '80%' }}></div>
+                    <div
+                      className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full"
+                      style={{
+                        width: `${todayAttendance?.total > 0 ? Math.min((todayAttendance.breakfast / todayAttendance.total) * 100, 100) : 0}%`
+                      }}
+                    ></div>
                   </div>
                 </div>
                 <div className="border-b border-gray-100 dark:border-gray-700 pb-4">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-medium text-gray-900 dark:text-white">Today's Lunch</span>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-white">150</span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">{todayAttendance?.lunch || 0}</span>
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div className="bg-green-600 dark:bg-green-400 h-2 rounded-full" style={{ width: '95%' }}></div>
+                    <div
+                      className="bg-green-600 dark:bg-green-400 h-2 rounded-full"
+                      style={{
+                        width: `${todayAttendance?.total > 0 ? Math.min((todayAttendance.lunch / todayAttendance.total) * 100, 100) : 0}%`
+                      }}
+                    ></div>
                   </div>
                 </div>
                 <div className="pb-4">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-medium text-gray-900 dark:text-white">Today's Dinner</span>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-white">140</span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">{todayAttendance?.dinner || 0}</span>
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div className="bg-orange-600 dark:bg-orange-400 h-2 rounded-full" style={{ width: '87%' }}></div>
+                    <div
+                      className="bg-orange-600 dark:bg-orange-400 h-2 rounded-full"
+                      style={{
+                        width: `${todayAttendance?.total > 0 ? Math.min((todayAttendance.dinner / todayAttendance.total) * 100, 100) : 0}%`
+                      }}
+                    ></div>
                   </div>
                 </div>
               </div>

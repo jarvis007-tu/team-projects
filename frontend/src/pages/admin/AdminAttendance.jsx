@@ -55,10 +55,13 @@ const AdminAttendance = () => {
         search: searchTerm || undefined,
         page: currentPage
       });
-      setAttendanceRecords(response.data.attendance);
-      setTotalPages(response.data.pagination.pages);
+      // Handle both response structures
+      const data = response.data?.data || response.data;
+      setAttendanceRecords(data.records || data.attendance || []);
+      setTotalPages(data.pagination?.pages || 1);
     } catch (error) {
       toast.error('Failed to fetch attendance records');
+      console.error('Attendance fetch error:', error);
     } finally {
       setLoading(false);
     }
@@ -69,7 +72,8 @@ const AdminAttendance = () => {
       const response = await attendanceService.getAttendanceAnalytics({
         date: selectedDate
       });
-      setAnalytics(response.data);
+      const data = response.data?.data || response.data || {};
+      setAnalytics(data);
     } catch (error) {
       console.error('Failed to fetch analytics');
     }
@@ -78,7 +82,17 @@ const AdminAttendance = () => {
   const fetchAttendanceTrends = async () => {
     try {
       const response = await attendanceService.getAttendanceTrends('week');
-      setAttendanceTrends(response.data);
+      const data = response.data?.data || response.data || {};
+      // Transform backend data to chart format
+      // Backend returns: {trends: [{date, count}]}
+      // Chart expects: [{date, present}]
+      const trends = (data.trends || []).map(item => ({
+        date: item.date,
+        present: item.count,
+        absent: 0, // Not tracked in current model
+        late: 0    // Not tracked in current model
+      }));
+      setAttendanceTrends(trends);
     } catch (error) {
       console.error('Failed to fetch trends');
     }
@@ -89,7 +103,18 @@ const AdminAttendance = () => {
       const response = await attendanceService.getMealWiseAttendance({
         date: selectedDate
       });
-      setMealWiseData(response.data);
+      const data = response.data?.data || response.data || {};
+      // Transform backend data to chart format
+      // Backend returns: {mealwise: {date: {breakfast: count, lunch: count, dinner: count}}}
+      // Chart expects: [{meal_type, present, absent}]
+      const mealwise = data.mealwise || {};
+      const todayData = mealwise[selectedDate] || {};
+      const chartData = [
+        { meal_type: 'Breakfast', present: todayData.breakfast || 0, absent: 0 },
+        { meal_type: 'Lunch', present: todayData.lunch || 0, absent: 0 },
+        { meal_type: 'Dinner', present: todayData.dinner || 0, absent: 0 }
+      ];
+      setMealWiseData(chartData);
     } catch (error) {
       console.error('Failed to fetch meal-wise data');
     }
@@ -444,13 +469,21 @@ const AdminAttendance = () => {
                             <FiUsers className="w-5 h-5 text-primary-600" />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">{record.user?.full_name}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">ID: {record.user_id}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              {typeof record.user_id === 'object'
+                                ? record.user_id?.full_name || 'N/A'
+                                : 'N/A'}
+                            </p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              ID: {typeof record.user_id === 'object'
+                                ? record.user_id?.user_id
+                                : record.user_id}
+                            </p>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                        {new Date(record.date).toLocaleDateString()}
+                        {new Date(record.scan_date || record.date || record.scan_time).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center">
@@ -460,9 +493,9 @@ const AdminAttendance = () => {
                       </td>
                       <td className="px-6 py-4">
                         <select
-                          value={record.status}
+                          value={record.status || 'present'}
                           onChange={(e) => handleUpdateAttendance(record.attendance_id, e.target.value)}
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border-0 ${getStatusColor(record.status)}`}
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border-0 ${getStatusColor(record.status || 'present')}`}
                         >
                           <option value="present">Present</option>
                           <option value="absent">Absent</option>
@@ -470,7 +503,8 @@ const AdminAttendance = () => {
                         </select>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                        {record.marked_at ? new Date(record.marked_at).toLocaleTimeString() : '-'}
+                        {record.scan_time ? new Date(record.scan_time).toLocaleTimeString() :
+                         record.created_at ? new Date(record.created_at).toLocaleTimeString() : '-'}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-2">

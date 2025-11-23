@@ -7,6 +7,7 @@ import {
 import { MdDashboard, MdPeople, MdSubscriptions, MdQrCodeScanner, MdRestaurantMenu, MdNotifications, MdSettings, MdLogout, MdAssessment } from 'react-icons/md';
 import { useAuth } from '../../contexts/AuthContext';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import dashboardService from '../../services/dashboardService';
 import reportService from '../../services/reportService';
 import { toast } from 'react-hot-toast';
 
@@ -24,7 +25,11 @@ const AdminDashboard = () => {
         veg: 0,
         'non-veg': 0,
         both: 0
-      }
+      },
+      userGrowth: 0,
+      subscriptionGrowth: 0,
+      attendanceGrowth: 0,
+      revenueGrowth: 0
     },
     charts: {
       attendanceTrend: [],
@@ -42,29 +47,83 @@ const AdminDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const response = await reportService.getDashboardStats();
-      const data = response.data;
+      setLoading(true);
+
+      // Fetch main dashboard stats
+      console.log('Fetching dashboard stats...');
+      const statsResponse = await dashboardService.getStats();
+      console.log('Stats Response:', statsResponse.data);
+      const statsData = statsResponse.data.data;
+
+      // Fetch attendance stats for chart
+      console.log('Fetching attendance stats...');
+      const attendanceResponse = await dashboardService.getAttendanceStats(selectedPeriod);
+      console.log('Attendance Response:', attendanceResponse.data);
+      const attendanceData = attendanceResponse.data.data;
+
+      // Fetch subscription stats for chart
+      console.log('Fetching subscription stats...');
+      const subscriptionResponse = await dashboardService.getSubscriptionStats();
+      console.log('Subscription Response:', subscriptionResponse.data);
+      const subscriptionData = subscriptionResponse.data.data;
+
+      // Fetch recent activity
+      console.log('Fetching recent activity...');
+      const activityResponse = await dashboardService.getRecentActivity(10);
+      console.log('Activity Response:', activityResponse.data);
+      const activityData = activityResponse.data.data || [];
+
+      // Calculate today's attendance by meal from attendance stats
+      const todayTotal = Array.isArray(statsData.attendance?.today) ?
+        statsData.attendance.today.reduce((sum, meal) => sum + meal.count, 0) :
+        (typeof statsData.attendance?.today === 'number' ? statsData.attendance.today : 0);
+
+      // Format subscription distribution for pie chart
+      const planDistribution = subscriptionData.planDistribution || [];
+      const subscriptionDistribution = planDistribution.map(plan => ({
+        name: plan._id || 'Unknown',
+        value: plan.count || 0
+      }));
+
+      // Format recent activity
+      const recentActivity = Array.isArray(activityData) ? activityData.map(activity => ({
+        user_name: activity.user?.full_name || 'Unknown User',
+        action: activity.message || activity.type || 'Activity',
+        time: activity.timestamp ? new Date(activity.timestamp).toLocaleTimeString() : 'Just now'
+      })) : [];
+
+      console.log('Final Dashboard Data:', {
+        stats: statsData,
+        charts: { attendanceData, subscriptionData },
+        recentActivity
+      });
 
       // Transform API response to match our state structure
       setDashboardData({
         stats: {
-          totalUsers: data.users?.total || 0,
-          activeSubscriptions: data.subscriptions?.active || 0,
-          todayAttendance: data.attendance?.today?.reduce((sum, meal) => sum + meal.count, 0) || 0,
-          monthlyRevenue: data.subscriptions?.monthlyRevenue || 0,
-          subscriptionsByType: data.subscriptions?.byType || { veg: 0, 'non-veg': 0, both: 0 }
+          totalUsers: statsData.users?.total || 0,
+          activeSubscriptions: statsData.subscriptions?.active || 0,
+          todayAttendance: todayTotal,
+          monthlyRevenue: statsData.revenue?.monthly || 0,
+          subscriptionsByType: statsData.subscriptions?.byType || { veg: 0, 'non-veg': 0, both: 0 },
+          // Growth percentages from backend
+          userGrowth: statsData.users?.growth || 0,
+          subscriptionGrowth: statsData.subscriptions?.growth || 0,
+          attendanceGrowth: statsData.attendance?.growth || 0,
+          revenueGrowth: statsData.revenue?.growth || 0
         },
         charts: {
-          attendanceTrend: data.attendance?.monthlyTrend || [],
-          subscriptionDistribution: [],
-          revenueChart: []
+          attendanceTrend: attendanceData.chartData || [],
+          subscriptionDistribution: subscriptionDistribution,
+          revenueChart: subscriptionData.monthlyGrowth || []
         },
-        recentActivity: [],
-        topUsers: []
+        recentActivity: recentActivity,
+        topUsers: [] // Can be added later with a separate endpoint
       });
     } catch (error) {
-      toast.error('Failed to load dashboard data');
       console.error('Dashboard data fetch error:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      toast.error('Failed to load dashboard data: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
     }
@@ -81,36 +140,42 @@ const AdminDashboard = () => {
     { icon: MdSettings, label: 'Settings', path: '/admin/settings' },
   ];
 
+  const formatGrowth = (growth) => {
+    if (!growth || growth === 0) return '0%';
+    const sign = growth > 0 ? '+' : '';
+    return `${sign}${growth.toFixed(1)}%`;
+  };
+
   const statsCards = [
     {
       title: 'Total Users',
       value: dashboardData.stats.totalUsers,
-      change: '+12%',
-      trend: 'up',
+      change: formatGrowth(dashboardData.stats.userGrowth),
+      trend: dashboardData.stats.userGrowth >= 0 ? 'up' : 'down',
       icon: FiUsers,
       color: 'primary'
     },
     {
       title: 'Active Subscriptions',
       value: dashboardData.stats.activeSubscriptions,
-      change: '+8%',
-      trend: 'up',
+      change: formatGrowth(dashboardData.stats.subscriptionGrowth),
+      trend: dashboardData.stats.subscriptionGrowth >= 0 ? 'up' : 'down',
       icon: FiCreditCard,
       color: 'success'
     },
     {
       title: 'Today\'s Attendance',
       value: dashboardData.stats.todayAttendance,
-      change: '-2%',
-      trend: 'down',
+      change: formatGrowth(dashboardData.stats.attendanceGrowth),
+      trend: dashboardData.stats.attendanceGrowth >= 0 ? 'up' : 'down',
       icon: FiCheckCircle,
       color: 'info'
     },
     {
       title: 'Monthly Revenue',
       value: `₹${dashboardData.stats.monthlyRevenue.toLocaleString()}`,
-      change: '+18%',
-      trend: 'up',
+      change: formatGrowth(dashboardData.stats.revenueGrowth),
+      trend: dashboardData.stats.revenueGrowth >= 0 ? 'up' : 'down',
       icon: FiTrendingUp,
       color: 'warning'
     }
@@ -228,31 +293,43 @@ const AdminDashboard = () => {
 
         {/* Dashboard Content */}
         <div className="p-6">
-          {/* Period Selector */}
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Overview</h2>
-              <p className="text-gray-600 dark:text-gray-300">Monitor your hostel mess performance</p>
+          {/* Loading State */}
+          {loading && (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600 mx-auto"></div>
+                <p className="mt-4 text-gray-600 dark:text-gray-400">Loading dashboard data...</p>
+              </div>
             </div>
-            <div className="flex space-x-2">
-              {['day', 'week', 'month'].map((period) => (
-                <button
-                  key={period}
-                  onClick={() => setSelectedPeriod(period)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    selectedPeriod === period
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {period.charAt(0).toUpperCase() + period.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
+          )}
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {!loading && (
+            <>
+              {/* Period Selector */}
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Overview</h2>
+                  <p className="text-gray-600 dark:text-gray-300">Monitor your hostel mess performance</p>
+                </div>
+                <div className="flex space-x-2">
+                  {['day', 'week', 'month'].map((period) => (
+                    <button
+                      key={period}
+                      onClick={() => setSelectedPeriod(period)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        selectedPeriod === period
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {period.charAt(0).toUpperCase() + period.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {statsCards.map((stat, index) => (
               <div key={index} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
@@ -415,6 +492,8 @@ const AdminDashboard = () => {
               </div>
             </div>
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>

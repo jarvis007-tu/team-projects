@@ -24,7 +24,7 @@ const validateWeeklyMenu = (req, res, next) => {
     menu: Joi.object().pattern(
       Joi.string().valid('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'),
       Joi.object().pattern(
-        Joi.string().valid('breakfast', 'lunch', 'dinner'),
+        Joi.string().valid('breakfast', 'lunch', 'snack', 'dinner'),
         Joi.object({
           items: Joi.array().items(Joi.string()).min(1).required(),
           special_note: Joi.string().max(500).allow('').optional()

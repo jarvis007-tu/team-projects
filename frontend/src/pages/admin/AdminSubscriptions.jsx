@@ -326,25 +326,55 @@ const AdminSubscriptions = () => {
 
         {/* Filters and Search */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-            <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
-              {/* Search */}
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search subscriptions..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
-                />
-                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              </div>
+          {/* Search and Bulk Actions Row */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+            {/* Search */}
+            <div className="relative flex-1 max-w-md">
+              <input
+                type="text"
+                placeholder="Search subscriptions..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+              />
+              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            </div>
 
-              {/* Status Filter */}
+            {/* Bulk Actions */}
+            {selectedSubscriptions.length > 0 && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                  {selectedSubscriptions.length} selected
+                </span>
+                <button
+                  onClick={() => handleBulkAction('renew')}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium flex items-center gap-2"
+                >
+                  <MdAutorenew className="w-4 h-4" />
+                  Bulk Renew
+                </button>
+                <button
+                  onClick={() => handleBulkAction('cancel')}
+                  className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium flex items-center gap-2"
+                >
+                  <MdCancel className="w-4 h-4" />
+                  Bulk Cancel
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Filters Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Status Filter */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Status
+              </label>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
@@ -352,12 +382,17 @@ const AdminSubscriptions = () => {
                 <option value="cancelled">Cancelled</option>
                 <option value="suspended">Suspended</option>
               </select>
+            </div>
 
-              {/* Plan Filter */}
+            {/* Plan Filter */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Plan
+              </label>
               <select
                 value={filterPlan}
                 onChange={(e) => setFilterPlan(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
               >
                 <option value="all">All Plans</option>
                 {subscriptionPlans.map(plan => (
@@ -366,12 +401,17 @@ const AdminSubscriptions = () => {
                   </option>
                 ))}
               </select>
+            </div>
 
-              {/* Mess Filter */}
+            {/* Mess Filter */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Mess Outlet
+              </label>
               <select
                 value={filterMess}
                 onChange={(e) => setFilterMess(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
               >
                 <option value="all">All Mess Outlets</option>
                 {Array.isArray(messes) && messes.map(mess => {
@@ -383,43 +423,27 @@ const AdminSubscriptions = () => {
                   );
                 })}
               </select>
+            </div>
 
-              {/* Expiring Soon Filter */}
+            {/* Expiring Soon Filter */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Quick Filter
+              </label>
               <button
                 onClick={() => setFilterExpiringSoon(!filterExpiringSoon)}
-                className={`px-4 py-2 border rounded-lg transition-colors ${
+                className={`w-full px-4 py-2 border rounded-lg transition-colors font-medium text-sm ${
                   filterExpiringSoon
                     ? 'bg-orange-500 text-white border-orange-500'
                     : 'bg-white text-gray-900 border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:hover:bg-gray-700'
                 }`}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center gap-2">
                   <FiCalendar className="w-4 h-4" />
-                  <span>Expiring Soon (2 weeks)</span>
+                  <span className="whitespace-nowrap">Expiring Soon</span>
                 </div>
               </button>
             </div>
-
-            {/* Bulk Actions */}
-            {selectedSubscriptions.length > 0 && (
-              <div className="flex items-center space-x-3">
-                <span className="text-sm text-gray-600">
-                  {selectedSubscriptions.length} selected
-                </span>
-                <button
-                  onClick={() => handleBulkAction('renew')}
-                  className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-                >
-                  Bulk Renew
-                </button>
-                <button
-                  onClick={() => handleBulkAction('cancel')}
-                  className="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
-                >
-                  Bulk Cancel
-                </button>
-              </div>
-            )}
           </div>
         </div>
 

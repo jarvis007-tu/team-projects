@@ -405,6 +405,44 @@ const AdminMenuManagement = () => {
     toast.success(`Added ${selectedMenuItems.length} item(s) to ${day} ${mealType}`);
   };
 
+  const handleRemoveMenuItem = (day, mealType, itemIndex) => {
+    const dayLower = day.toLowerCase();
+
+    setWeeklyMenu(prev => {
+      // Deep copy to avoid mutation issues
+      const updatedMenu = JSON.parse(JSON.stringify(prev));
+
+      // Check if day and mealType exist
+      if (!updatedMenu[dayLower] || !updatedMenu[dayLower][mealType]) {
+        return prev; // Return unchanged if structure doesn't exist
+      }
+
+      // Remove item at the specified index from both items and menu_items arrays
+      const items = updatedMenu[dayLower][mealType].items || [];
+      const menuItems = updatedMenu[dayLower][mealType].menu_items || [];
+
+      // Remove from items array (item names)
+      if (items.length > itemIndex) {
+        items.splice(itemIndex, 1);
+      }
+
+      // Remove from menu_items array (item IDs) - should be at same index
+      if (menuItems.length > itemIndex) {
+        menuItems.splice(itemIndex, 1);
+      }
+
+      updatedMenu[dayLower][mealType] = {
+        ...updatedMenu[dayLower][mealType],
+        items: items,
+        menu_items: menuItems
+      };
+
+      return updatedMenu;
+    });
+
+    toast.success('Item removed from menu');
+  };
+
   const handleSaveWeeklyMenu = async () => {
     try {
       // Clean up the menu data before sending - remove empty special_notes and format properly
@@ -645,9 +683,16 @@ const AdminMenuManagement = () => {
                               {menuItems.length > 0 ? menuItems.map((itemName, idx) => (
                                 <div
                                   key={idx}
-                                  className="p-2 bg-gray-50 dark:bg-gray-600 rounded text-sm text-gray-600 dark:text-gray-300"
+                                  className="p-2 bg-gray-50 dark:bg-gray-600 rounded text-sm text-gray-600 dark:text-gray-300 flex items-center justify-between group"
                                 >
-                                  {itemName}
+                                  <span>{itemName}</span>
+                                  <button
+                                    onClick={() => handleRemoveMenuItem(day, mealType, idx)}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 p-1"
+                                    title="Remove item"
+                                  >
+                                    <FiX className="w-4 h-4" />
+                                  </button>
                                 </div>
                               )) : (
                                 <div className="p-2 bg-gray-100 dark:bg-gray-600 rounded text-sm text-gray-400 dark:text-gray-300 text-center">

@@ -57,6 +57,16 @@ const validateSubscriptionCreate = (req, res, next) => {
 
 const validateSubscriptionUpdate = (req, res, next) => {
   const schema = Joi.object({
+    // Allow these fields but they won't be updated (read-only)
+    user_id: Joi.any().optional(), // Allow but ignore - can't change user
+    mess_id: Joi.any().optional(), // Allow but ignore - can't change mess
+    subscription_id: Joi.any().optional(), // Allow but ignore - ID field
+    _id: Joi.any().optional(), // Allow but ignore - ID field
+    created_at: Joi.any().optional(), // Allow but ignore - timestamp
+    updated_at: Joi.any().optional(), // Allow but ignore - timestamp
+    plan_name: Joi.string().optional(), // Allow plan_name updates
+
+    // Updateable fields
     plan_type: Joi.string().valid('daily', 'weekly', 'monthly', 'quarterly', 'yearly').optional(),
     sub_type: Joi.string().valid('veg', 'non-veg', 'both').optional(),
     start_date: Joi.alternatives().try(
@@ -80,7 +90,8 @@ const validateSubscriptionUpdate = (req, res, next) => {
       dinner: Joi.boolean().optional()
     }).optional(),
     special_requirements: Joi.string().allow('', null).optional(),
-    notes: Joi.string().allow('', null).optional()
+    notes: Joi.string().allow('', null).optional(),
+    deleted_at: Joi.any().optional() // Allow but ignore
   });
 
   const { error } = schema.validate(req.body);
@@ -90,6 +101,13 @@ const validateSubscriptionUpdate = (req, res, next) => {
       message: error.details[0].message
     });
   }
+
+  // Strip out read-only fields before passing to controller
+  const readOnlyFields = ['user_id', 'mess_id', 'subscription_id', '_id', 'created_at', 'updated_at', 'deleted_at'];
+  readOnlyFields.forEach(field => {
+    delete req.body[field];
+  });
+
   next();
 };
 

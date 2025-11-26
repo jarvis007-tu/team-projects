@@ -1,10 +1,11 @@
 const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const logger = require('../utils/logger');
+const mongoose = require('mongoose');
 
 // Extension methods for subscription controller
 const subscriptionExtensions = {
-  // Delete subscription
+  // Delete subscription (soft delete)
   async deleteSubscription(req, res) {
     try {
       const { id } = req.params;
@@ -18,7 +19,10 @@ const subscriptionExtensions = {
         });
       }
 
-      await subscription.remove();
+      // Soft delete - set deleted_at timestamp
+      await Subscription.findByIdAndUpdate(id, { deleted_at: new Date() });
+
+      logger.info(`Subscription ${id} soft deleted`);
 
       res.json({
         success: true,
@@ -45,9 +49,17 @@ const subscriptionExtensions = {
         });
       }
 
+      // Convert string IDs to ObjectIds
+      const objectIds = ids.map(id => {
+        if (mongoose.Types.ObjectId.isValid(id)) {
+          return new mongoose.Types.ObjectId(id);
+        }
+        return id;
+      });
+
       const result = await Subscription.updateMany(
         {
-          subscription_id: { $in: ids }
+          _id: { $in: objectIds }
         },
         { $set: updateData }
       );
@@ -174,7 +186,7 @@ const subscriptionExtensions = {
         {
           $match: {
             createdAt: { $gte: startDate },
-            deletedAt: null
+            deleted_at: null
           }
         },
         {
@@ -283,7 +295,7 @@ const subscriptionExtensions = {
       if (format === 'csv') {
         const csv = 'ID,User,Email,Plan,Amount,Status,Start Date,End Date\n' +
           subscriptions.map(s =>
-            `${s.subscription_id},"${s.user_id?.full_name || ''}","${s.user_id?.email || ''}","${s.plan_type}",${s.amount},"${s.status}","${s.start_date}","${s.end_date}"`
+            `${s._id || s.subscription_id},"${s.user_id?.full_name || ''}","${s.user_id?.email || ''}","${s.plan_type}",${s.amount},"${s.status}","${s.start_date}","${s.end_date}"`
           ).join('\n');
 
         res.setHeader('Content-Type', 'text/csv');

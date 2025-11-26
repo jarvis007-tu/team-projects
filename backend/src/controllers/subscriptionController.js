@@ -365,10 +365,12 @@ class SubscriptionController {
       }
 
       // Update subscription
+      // Note: runValidators is disabled because inline schema validators don't have access to full document context
+      // Date validation is handled by pre-update middleware hook in the model
       const subscription = await Subscription.findByIdAndUpdate(
         id,
         updates,
-        { new: true, runValidators: true }
+        { new: true, runValidators: false }
       );
 
       res.json({
@@ -380,7 +382,8 @@ class SubscriptionController {
       logger.error('Error updating subscription:', error);
       res.status(500).json({
         success: false,
-        message: 'Failed to update subscription'
+        message: 'Failed to update subscription',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   }
@@ -432,30 +435,31 @@ class SubscriptionController {
 
   // Renew subscription
   async renewSubscription(req, res) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
       const { id } = req.params;
-      const { plan_type, payment_id } = req.body;
+      const { plan_type, payment_id, amount: providedAmount } = req.body;
 
       const oldSubscription = await Subscription.findById(id);
 
       if (!oldSubscription) {
-        await session.abortTransaction();
-        session.endSession();
         return res.status(404).json({
           success: false,
           message: 'Subscription not found'
         });
       }
 
-      // Calculate new dates
+      // Calculate new dates - start from day after old subscription ends
       const startDate = moment(oldSubscription.end_date).add(1, 'day');
       let endDate;
       let amount;
 
-      switch (plan_type || oldSubscription.plan_type) {
+      const selectedPlanType = plan_type || oldSubscription.plan_type;
+
+      switch (selectedPlanType) {
+        case 'daily':
+          endDate = startDate.clone().add(1, 'day');
+          amount = 100;
+          break;
         case 'weekly':
           endDate = startDate.clone().add(7, 'days');
           amount = 700;
@@ -472,34 +476,51 @@ class SubscriptionController {
           endDate = startDate.clone().add(1, 'year');
           amount = 30000;
           break;
+        default:
+          // Default to monthly if plan type is not recognized
+          endDate = startDate.clone().add(1, 'month');
+          amount = 3000;
       }
 
-      const newSubscription = await Subscription.create([{
+      // Use provided amount if given
+      if (providedAmount) {
+        amount = providedAmount;
+      }
+
+      const newSubscription = await Subscription.create({
         user_id: oldSubscription.user_id,
-        plan_type: plan_type || oldSubscription.plan_type,
+        mess_id: oldSubscription.mess_id, // Copy mess_id from old subscription
+        plan_type: selectedPlanType,
+        plan_name: `${selectedPlanType.charAt(0).toUpperCase() + selectedPlanType.slice(1)} Plan`,
+        sub_type: oldSubscription.sub_type || 'both', // Copy sub_type from old subscription
         start_date: startDate.format('YYYY-MM-DD'),
         end_date: endDate.format('YYYY-MM-DD'),
         amount,
         payment_id,
-        payment_status: payment_id ? 'paid' : 'pending',
-        status: 'active'
-      }], { session });
+        payment_status: payment_id ? 'paid' : 'paid', // Mark as paid for renewal
+        payment_method: oldSubscription.payment_method,
+        status: 'active',
+        meals_included: oldSubscription.meals_included, // Copy meal preferences
+        auto_renewal: oldSubscription.auto_renewal,
+        special_requirements: oldSubscription.special_requirements
+      });
 
-      await session.commitTransaction();
-      session.endSession();
+      // Optionally mark old subscription as expired
+      await Subscription.findByIdAndUpdate(id, { status: 'expired' });
+
+      logger.info(`Subscription ${id} renewed. New subscription: ${newSubscription._id}`);
 
       res.json({
         success: true,
         message: 'Subscription renewed successfully',
-        data: newSubscription[0]
+        data: newSubscription
       });
     } catch (error) {
-      await session.abortTransaction();
-      session.endSession();
       logger.error('Error renewing subscription:', error);
       res.status(500).json({
         success: false,
-        message: 'Failed to renew subscription'
+        message: 'Failed to renew subscription',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   }

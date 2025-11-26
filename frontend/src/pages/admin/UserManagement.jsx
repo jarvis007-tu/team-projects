@@ -226,7 +226,19 @@ const UserManagement = () => {
       fetchUsers();
     } catch (error) {
       // Show actual API error message
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to create user';
+      let errorMessage = 'Failed to create user';
+
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      }
+
+      // For 409 conflict (user already exists)
+      if (error.response?.status === 409) {
+        errorMessage = error.response?.data?.message || 'User with this email or phone already exists';
+      }
+
       toast.error(errorMessage);
     }
   };
@@ -291,7 +303,19 @@ const UserManagement = () => {
       fetchUsers();
     } catch (error) {
       // Show actual API error message
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to update user';
+      let errorMessage = 'Failed to update user';
+
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      }
+
+      // For 409 conflict (duplicate email/phone)
+      if (error.response?.status === 409) {
+        errorMessage = error.response?.data?.message || 'User with this email or phone already exists';
+      }
+
       toast.error(errorMessage);
     }
   };

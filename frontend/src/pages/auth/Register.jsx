@@ -174,7 +174,25 @@ const Register = () => {
       }
     } catch (error) {
       // Show actual API error message instead of generic "Registration failed"
-      const errorMessage = error.response?.data?.message || error.message || 'Registration failed. Please try again.';
+      // Handle different error response structures
+      let errorMessage = 'Registration failed. Please try again.';
+
+      if (error.response?.data?.message) {
+        // Standard API error response
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        // Alternative error structure
+        errorMessage = error.response.data.error;
+      } else if (error.message && error.message !== 'Request failed with status code 409') {
+        // Use error.message only if it's meaningful
+        errorMessage = error.message;
+      }
+
+      // For 409 conflict (user already exists), show specific message
+      if (error.response?.status === 409) {
+        errorMessage = error.response?.data?.message || 'User with this email or phone already exists';
+      }
+
       toast.error(errorMessage);
     } finally {
       setLoading(false);

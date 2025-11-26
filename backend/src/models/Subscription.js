@@ -227,9 +227,35 @@ SubscriptionSchema.methods.toJSON = function() {
     delete subscriptionObject.updatedAt;
   }
 
-  // Convert user_id ObjectId to string for frontend
+  // Handle user_id - check if populated (object) or just ObjectId
   if (subscriptionObject.user_id) {
-    subscriptionObject.user_id = subscriptionObject.user_id.toString();
+    if (typeof subscriptionObject.user_id === 'object' && subscriptionObject.user_id._id) {
+      // user_id is populated - transform the nested user object
+      const user = subscriptionObject.user_id;
+      subscriptionObject.user_id = {
+        _id: user._id,
+        user_id: user._id,
+        full_name: user.full_name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status
+      };
+    } else if (subscriptionObject.user_id._bsontype === 'ObjectId' || typeof subscriptionObject.user_id === 'string') {
+      // user_id is not populated - convert ObjectId to string
+      subscriptionObject.user_id = subscriptionObject.user_id.toString();
+    }
+  }
+
+  // Handle mess_id - check if populated (object) or just ObjectId
+  if (subscriptionObject.mess_id) {
+    if (typeof subscriptionObject.mess_id === 'object' && subscriptionObject.mess_id._id) {
+      // mess_id is populated - keep the nested object as is
+      // It already has proper structure from Mess model
+    } else if (subscriptionObject.mess_id._bsontype === 'ObjectId' || typeof subscriptionObject.mess_id === 'string') {
+      // mess_id is not populated - convert ObjectId to string
+      subscriptionObject.mess_id = subscriptionObject.mess_id.toString();
+    }
   }
 
   return subscriptionObject;

@@ -203,11 +203,12 @@ async function seed() {
     logger.info('Created menu categories for both messes');
 
     // Create super admin user (can manage all messes)
+    // Password: Admin@123 (meets validation: min 8 chars, 1 number, 1 special char)
     const superAdmin = await User.create({
       full_name: 'Super Administrator',
       email: 'superadmin@hosteleats.com',
       phone: '9876543210',
-      password: 'admin123',
+      password: 'Admin@123',
       mess_id: mess1._id, // Assign to first mess by default
       role: 'super_admin',
       status: 'active',
@@ -221,7 +222,7 @@ async function seed() {
       full_name: 'Mess A Admin',
       email: 'admin-a@hosteleats.com',
       phone: '9876543211',
-      password: 'admin123',
+      password: 'Admin@123',
       mess_id: mess1._id,
       role: 'mess_admin',
       status: 'active',
@@ -234,7 +235,7 @@ async function seed() {
       full_name: 'Mess B Admin',
       email: 'admin-b@hosteleats.com',
       phone: '9876543212',
-      password: 'admin123',
+      password: 'Admin@123',
       mess_id: mess2._id,
       role: 'mess_admin',
       status: 'active',
@@ -249,11 +250,12 @@ async function seed() {
       // Assign users alternately to mess1 and mess2
       const assignedMess = i % 2 === 0 ? mess2 : mess1;
 
+      // Password: User@123 (meets validation: min 8 chars, 1 number, 1 special char)
       const user = await User.create({
         full_name: `Test User ${i}`,
         email: `user${i}@example.com`,
         phone: `98765432${20 + i}`,
-        password: 'user123',
+        password: 'User@123',
         mess_id: assignedMess._id,
         role: 'subscriber',
         status: 'active',
@@ -468,16 +470,16 @@ async function seed() {
     logger.info('\n=== TEST CREDENTIALS ===');
     logger.info('Super Admin (All Messes):');
     logger.info('  Email: superadmin@hosteleats.com');
-    logger.info('  Password: admin123');
+    logger.info('  Password: Admin@123');
     logger.info('\nMess A Admin:');
     logger.info('  Email: admin-a@hosteleats.com');
-    logger.info('  Password: admin123');
+    logger.info('  Password: Admin@123');
     logger.info('\nMess B Admin:');
     logger.info('  Email: admin-b@hosteleats.com');
-    logger.info('  Password: admin123');
+    logger.info('  Password: Admin@123');
     logger.info('\nTest User:');
     logger.info('  Email: user1@example.com');
-    logger.info('  Password: user123');
+    logger.info('  Password: User@123');
     logger.info('========================\n');
 
     await disconnectDB();

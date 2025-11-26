@@ -1,6 +1,8 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const WeeklyMenu = require('../src/models/WeeklyMenu');
+const MenuCategory = require('../src/models/MenuCategory');
+const MenuItem = require('../src/models/MenuItem');
 const Mess = require('../src/models/Mess');
 const User = require('../src/models/User');
 const moment = require('moment');
@@ -20,73 +22,150 @@ async function seedMenu() {
       process.exit(1);
     }
 
-    // Clear existing menu
-    await WeeklyMenu.deleteMany({});
-    console.log('Cleared existing menu');
+    // Get or create menu categories for this mess
+    let categories = await MenuCategory.find({ mess_id: mess._id, deleted_at: null });
 
-    // Calculate current week
-    const weekStart = moment().startOf('week').add(1, 'day'); // Monday
-    const weekEnd = moment(weekStart).add(6, 'days');
+    if (categories.length === 0) {
+      console.log('Creating default menu categories...');
+      categories = await MenuCategory.create([
+        {
+          mess_id: mess._id,
+          name: 'Breakfast',
+          slug: 'breakfast',
+          display_name: 'Breakfast',
+          description: 'Morning meal',
+          icon: 'MdFreeBreakfast',
+          color: 'orange',
+          sort_order: 1,
+          is_default: true,
+          is_active: true
+        },
+        {
+          mess_id: mess._id,
+          name: 'Lunch',
+          slug: 'lunch',
+          display_name: 'Lunch',
+          description: 'Afternoon meal',
+          icon: 'MdLunchDining',
+          color: 'blue',
+          sort_order: 2,
+          is_default: true,
+          is_active: true
+        },
+        {
+          mess_id: mess._id,
+          name: 'Snack',
+          slug: 'snack',
+          display_name: 'Snacks',
+          description: 'Evening snacks',
+          icon: 'MdFastfood',
+          color: 'green',
+          sort_order: 3,
+          is_default: true,
+          is_active: true
+        },
+        {
+          mess_id: mess._id,
+          name: 'Dinner',
+          slug: 'dinner',
+          display_name: 'Dinner',
+          description: 'Evening meal',
+          icon: 'MdDinnerDining',
+          color: 'purple',
+          sort_order: 4,
+          is_default: true,
+          is_active: true
+        }
+      ]);
+      console.log('Created menu categories');
+    }
+
+    // Create category lookup
+    const categoryMap = {};
+    categories.forEach(cat => {
+      categoryMap[cat.slug] = cat;
+    });
+
+    // Clear existing menu for this mess
+    await WeeklyMenu.deleteMany({ mess_id: mess._id });
+    console.log('Cleared existing weekly menu');
+
+    // Calculate current week (ISO week starts on Monday)
+    const weekStart = moment().startOf('isoWeek').toDate();
+    const weekEnd = moment().endOf('isoWeek').toDate();
 
     const menuData = [
       // Monday
-      { day: 'monday', meal_type: 'breakfast', items: ['Idli', 'Sambar', 'Coconut Chutney', 'Tea/Coffee'], notes: 'South Indian special' },
-      { day: 'monday', meal_type: 'lunch', items: ['Rice', 'Dal Tadka', 'Mixed Vegetable', 'Chapati', 'Pickle'], notes: '' },
-      { day: 'monday', meal_type: 'dinner', items: ['Chapati', 'Paneer Butter Masala', 'Jeera Rice', 'Salad'], notes: 'Paneer special' },
+      { day: 'monday', category: 'breakfast', items: ['Idli', 'Sambar', 'Coconut Chutney', 'Tea/Coffee'], notes: 'South Indian special' },
+      { day: 'monday', category: 'lunch', items: ['Rice', 'Dal Tadka', 'Mixed Vegetable', 'Chapati', 'Pickle'], notes: '' },
+      { day: 'monday', category: 'dinner', items: ['Chapati', 'Paneer Butter Masala', 'Jeera Rice', 'Salad'], notes: 'Paneer special' },
 
       // Tuesday
-      { day: 'tuesday', meal_type: 'breakfast', items: ['Paratha', 'Curd', 'Pickle', 'Tea/Coffee'], notes: '' },
-      { day: 'tuesday', meal_type: 'lunch', items: ['Rice', 'Rajma Masala', 'Aloo Gobi', 'Chapati'], notes: 'Rajma day' },
-      { day: 'tuesday', meal_type: 'dinner', items: ['Chapati', 'Dal Makhani', 'Vegetable Pulao', 'Raita'], notes: '' },
+      { day: 'tuesday', category: 'breakfast', items: ['Paratha', 'Curd', 'Pickle', 'Tea/Coffee'], notes: '' },
+      { day: 'tuesday', category: 'lunch', items: ['Rice', 'Rajma Masala', 'Aloo Gobi', 'Chapati'], notes: 'Rajma day' },
+      { day: 'tuesday', category: 'dinner', items: ['Chapati', 'Dal Makhani', 'Vegetable Pulao', 'Raita'], notes: '' },
 
       // Wednesday
-      { day: 'wednesday', meal_type: 'breakfast', items: ['Dosa', 'Sambar', 'Chutney', 'Tea/Coffee'], notes: 'Crispy dosa' },
-      { day: 'wednesday', meal_type: 'lunch', items: ['Rice', 'Chole', 'Bhindi Fry', 'Chapati'], notes: '' },
-      { day: 'wednesday', meal_type: 'dinner', items: ['Chapati', 'Kadai Paneer', 'Fried Rice', 'Soup'], notes: 'Chinese style' },
+      { day: 'wednesday', category: 'breakfast', items: ['Dosa', 'Sambar', 'Chutney', 'Tea/Coffee'], notes: 'Crispy dosa' },
+      { day: 'wednesday', category: 'lunch', items: ['Rice', 'Chole', 'Bhindi Fry', 'Chapati'], notes: '' },
+      { day: 'wednesday', category: 'dinner', items: ['Chapati', 'Kadai Paneer', 'Fried Rice', 'Soup'], notes: 'Chinese style' },
 
       // Thursday
-      { day: 'thursday', meal_type: 'breakfast', items: ['Poha', 'Jalebi', 'Tea/Coffee'], notes: 'Traditional breakfast' },
-      { day: 'thursday', meal_type: 'lunch', items: ['Rice', 'Dal Fry', 'Aloo Matar', 'Chapati'], notes: '' },
-      { day: 'thursday', meal_type: 'dinner', items: ['Chapati', 'Mixed Veg Curry', 'Pulao', 'Salad'], notes: '' },
+      { day: 'thursday', category: 'breakfast', items: ['Poha', 'Jalebi', 'Tea/Coffee'], notes: 'Traditional breakfast' },
+      { day: 'thursday', category: 'lunch', items: ['Rice', 'Dal Fry', 'Aloo Matar', 'Chapati'], notes: '' },
+      { day: 'thursday', category: 'dinner', items: ['Chapati', 'Mixed Veg Curry', 'Pulao', 'Salad'], notes: '' },
 
       // Friday
-      { day: 'friday', meal_type: 'breakfast', items: ['Upma', 'Banana', 'Tea/Coffee'], notes: '' },
-      { day: 'friday', meal_type: 'lunch', items: ['Rice', 'Sambar', 'Cabbage Poriyal', 'Chapati'], notes: 'South Indian thali' },
-      { day: 'friday', meal_type: 'dinner', items: ['Chapati', 'Shahi Paneer', 'Jeera Rice', 'Sweet'], notes: 'Special Friday dinner' },
+      { day: 'friday', category: 'breakfast', items: ['Upma', 'Banana', 'Tea/Coffee'], notes: '' },
+      { day: 'friday', category: 'lunch', items: ['Rice', 'Sambar', 'Cabbage Poriyal', 'Chapati'], notes: 'South Indian thali' },
+      { day: 'friday', category: 'dinner', items: ['Chapati', 'Shahi Paneer', 'Jeera Rice', 'Sweet'], notes: 'Special Friday dinner' },
 
       // Saturday
-      { day: 'saturday', meal_type: 'breakfast', items: ['Aloo Paratha', 'Curd', 'Butter', 'Tea/Coffee'], notes: 'Weekend special' },
-      { day: 'saturday', meal_type: 'lunch', items: ['Rice', 'Kadhi', 'Palak Paneer', 'Chapati'], notes: '' },
-      { day: 'saturday', meal_type: 'dinner', items: ['Chapati', 'Malai Kofta', 'Veg Biryani', 'Raita'], notes: 'Biryani night' },
+      { day: 'saturday', category: 'breakfast', items: ['Aloo Paratha', 'Curd', 'Butter', 'Tea/Coffee'], notes: 'Weekend special' },
+      { day: 'saturday', category: 'lunch', items: ['Rice', 'Kadhi', 'Palak Paneer', 'Chapati'], notes: '' },
+      { day: 'saturday', category: 'dinner', items: ['Chapati', 'Malai Kofta', 'Veg Biryani', 'Raita'], notes: 'Biryani night' },
 
       // Sunday
-      { day: 'sunday', meal_type: 'breakfast', items: ['Chole Bhature', 'Lassi', 'Pickle'], notes: 'Sunday special' },
-      { day: 'sunday', meal_type: 'lunch', items: ['Rice', 'Dal Makhani', 'Mix Veg', 'Chapati', 'Ice Cream'], notes: 'Sweet treat' },
-      { day: 'sunday', meal_type: 'dinner', items: ['Chapati', 'Matar Paneer', 'Pulao', 'Salad'], notes: '' },
+      { day: 'sunday', category: 'breakfast', items: ['Chole Bhature', 'Lassi', 'Pickle'], notes: 'Sunday special' },
+      { day: 'sunday', category: 'lunch', items: ['Rice', 'Dal Makhani', 'Mix Veg', 'Chapati', 'Ice Cream'], notes: 'Sweet treat' },
+      { day: 'sunday', category: 'dinner', items: ['Chapati', 'Matar Paneer', 'Pulao', 'Salad'], notes: '' },
     ];
 
-    // Insert menu items
-    const menuItems = menuData.map(item => ({
-      ...item,
-      mess_id: mess._id,
-      week_start_date: weekStart.toDate(),
-      week_end_date: weekEnd.toDate(),
-      is_active: true,
-      created_by: admin._id,
-      price: 0,
-      is_veg: true,
-      nutritional_info: {
-        calories: 450,
-        protein: 12,
-        carbs: 60,
-        fat: 8,
-        fiber: 5
+    // Insert menu items using the new schema structure
+    const menuItems = menuData.map(item => {
+      const category = categoryMap[item.category];
+      if (!category) {
+        console.warn(`Category not found: ${item.category}`);
+        return null;
       }
-    }));
+
+      return {
+        mess_id: mess._id,
+        week_start_date: weekStart,
+        week_end_date: weekEnd,
+        day: item.day,
+        category_id: category._id,
+        menu_items: [], // Will be populated if MenuItem records exist
+        items: item.items, // Legacy field for backward compatibility
+        special_items: [],
+        is_active: true,
+        created_by: admin._id,
+        price: 0,
+        is_veg: true,
+        notes: item.notes,
+        nutritional_info: {
+          calories: item.category === 'breakfast' ? 400 : item.category === 'lunch' ? 600 : 500,
+          protein: item.category === 'breakfast' ? 10 : item.category === 'lunch' ? 20 : 15,
+          carbs: item.category === 'breakfast' ? 60 : item.category === 'lunch' ? 80 : 70,
+          fat: item.category === 'breakfast' ? 10 : item.category === 'lunch' ? 15 : 12,
+          fiber: item.category === 'breakfast' ? 5 : item.category === 'lunch' ? 8 : 6
+        }
+      };
+    }).filter(Boolean);
 
     await WeeklyMenu.insertMany(menuItems);
     console.log(`✅ Seeded ${menuItems.length} menu items for mess: ${mess.name}`);
-    console.log(`📅 Week: ${weekStart.format('YYYY-MM-DD')} to ${weekEnd.format('YYYY-MM-DD')}`);
+    console.log(`📅 Week: ${moment(weekStart).format('YYYY-MM-DD')} to ${moment(weekEnd).format('YYYY-MM-DD')}`);
 
     process.exit(0);
   } catch (error) {

@@ -1,4 +1,4 @@
-const moment = require('moment');
+const moment = require('moment-timezone');
 const User = require('../models/User');
 const Mess = require('../models/Mess');
 const Subscription = require('../models/Subscription');
@@ -55,14 +55,27 @@ class SubscriptionController {
   // Get user's subscriptions
   async getUserSubscriptions(req, res) {
     try {
-      const userId = req.user.role === 'admin' ? req.params.userId : req.user.id;
+      // For admin routes with :userId param, use that; otherwise use current user's ID
+      const userId = req.params.userId || req.user.user_id;
 
-      const subscriptions = await Subscription.find({ user_id: userId })
+      // Convert to ObjectId if valid
+      const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+        ? new mongoose.Types.ObjectId(userId)
+        : userId;
+
+      logger.debug(`Getting subscriptions for user: ${userId}`);
+
+      const subscriptions = await Subscription.find({ user_id: userObjectId, deleted_at: null })
+        .populate('mess_id', 'name code')
         .sort({ createdAt: -1 });
+
+      logger.debug(`Found ${subscriptions.length} subscriptions for user`);
 
       res.json({
         success: true,
-        data: subscriptions
+        data: {
+          subscriptions: subscriptions
+        }
       });
     } catch (error) {
       logger.error('Error fetching user subscriptions:', error);
@@ -76,18 +89,59 @@ class SubscriptionController {
   // Get active subscription
   async getActiveSubscription(req, res) {
     try {
-      const userId = req.user.id;
-      const today = moment().format('YYYY-MM-DD');
+      // Convert user_id to ObjectId if it's a string
+      const userId = req.user.user_id;
+      const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+        ? new mongoose.Types.ObjectId(userId)
+        : userId;
 
-      const subscription = await Subscription.findOne({
-        user_id: userId,
-        mess_id: req.user.mess_id,
+      // Handle mess_id whether it's a string, ObjectId, or populated object
+      const messId = req.user.mess_id?._id || req.user.mess_id;
+      const messObjectId = messId && mongoose.Types.ObjectId.isValid(messId)
+        ? new mongoose.Types.ObjectId(messId)
+        : messId;
+
+      // Use UTC for consistent date comparison with MongoDB
+      const today = moment.utc().startOf('day').toDate();
+
+      logger.debug(`Getting active subscription for user: ${userId} (ObjectId: ${userObjectId}), mess: ${messId}, today: ${today}`);
+
+      // First try with both user_id and mess_id
+      let subscription = await Subscription.findOne({
+        user_id: userObjectId,
+        mess_id: messObjectId,
         status: 'active',
+        deleted_at: null,
         start_date: { $lte: today },
         end_date: { $gte: today }
-      });
+      }).populate('mess_id', 'name code');
+
+      // If not found, try without mess_id filter
+      if (!subscription) {
+        logger.debug('No subscription found with mess filter, trying without...');
+        subscription = await Subscription.findOne({
+          user_id: userObjectId,
+          status: 'active',
+          deleted_at: null,
+          start_date: { $lte: today },
+          end_date: { $gte: today }
+        }).populate('mess_id', 'name code');
+      }
+
+      // If still not found, try with string comparison as fallback
+      if (!subscription) {
+        logger.debug('Trying with string user_id...');
+        subscription = await Subscription.findOne({
+          user_id: userId,
+          status: 'active',
+          deleted_at: null,
+          start_date: { $lte: today },
+          end_date: { $gte: today }
+        }).populate('mess_id', 'name code');
+      }
 
       if (!subscription) {
+        logger.debug('No active subscription found for user');
         return res.json({
           success: true,
           data: null,
@@ -95,6 +149,7 @@ class SubscriptionController {
         });
       }
 
+      logger.debug(`Found active subscription: ${subscription._id}`);
       res.json({
         success: true,
         data: subscription
@@ -120,7 +175,15 @@ class SubscriptionController {
         end_date,
         status,
         payment_id,
-        meal_plan
+        payment_status,
+        payment_method,
+        meal_plan,
+        sub_type,
+        amount: providedAmount,
+        meals_included,
+        auto_renewal,
+        special_requirements,
+        notes
       } = req.body;
 
       // Check if user exists
@@ -155,7 +218,7 @@ class SubscriptionController {
       const subscriptionMessId = mess_id || user.mess_id;
 
       // Check for existing active subscription
-      const today = moment().format('YYYY-MM-DD');
+      const today = moment.utc().startOf('day').toDate();
       const existingSubscription = await Subscription.findOne({
         user_id,
         mess_id: subscriptionMessId,
@@ -231,13 +294,33 @@ class SubscriptionController {
         subscriptionData.amount = 3000; // Default monthly amount
       }
 
+      // Override calculated amount if provided
+      if (providedAmount) {
+        subscriptionData.amount = providedAmount;
+      }
+
       // Add optional fields
       if (plan_id) subscriptionData.plan_id = plan_id;
+      if (sub_type) subscriptionData.sub_type = sub_type;
+      if (meal_plan) subscriptionData.meal_plan = meal_plan;
+      if (meals_included) subscriptionData.meals_included = meals_included;
+      if (auto_renewal !== undefined) subscriptionData.auto_renewal = auto_renewal;
+      if (special_requirements) subscriptionData.special_requirements = special_requirements;
+      if (notes) subscriptionData.notes = notes;
+
+      // Handle payment status - if status is 'active', payment should be 'paid'
+      if (payment_status) {
+        subscriptionData.payment_status = payment_status;
+      } else if (status === 'active') {
+        // If admin sets status to active, assume payment is done
+        subscriptionData.payment_status = 'paid';
+      }
+
+      if (payment_method) subscriptionData.payment_method = payment_method;
       if (payment_id) {
         subscriptionData.payment_id = payment_id;
         subscriptionData.payment_status = 'paid';
       }
-      if (meal_plan) subscriptionData.meal_plan = meal_plan;
 
       const subscription = await Subscription.create(subscriptionData);
 
@@ -424,7 +507,7 @@ class SubscriptionController {
   // Get subscription statistics
   async getSubscriptionStats(req, res) {
     try {
-      const today = moment().format('YYYY-MM-DD');
+      const today = moment.utc().startOf('day').toDate();
 
       const [activeCount, expiredCount, totalRevenue] = await Promise.all([
         Subscription.countDocuments({
@@ -468,7 +551,7 @@ class SubscriptionController {
   // Check and update expired subscriptions
   async updateExpiredSubscriptions(req, res) {
     try {
-      const today = moment().format('YYYY-MM-DD');
+      const today = moment.utc().startOf('day').toDate();
 
       const result = await Subscription.updateMany(
         {

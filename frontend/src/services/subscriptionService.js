@@ -6,6 +6,16 @@ const subscriptionService = {
     return api.get('/subscriptions', { params });
   },
 
+  // Get current user's subscriptions
+  getMySubscriptions: () => {
+    return api.get('/subscriptions/my-subscriptions');
+  },
+
+  // Get current user's active subscription
+  getActiveSubscription: () => {
+    return api.get('/subscriptions/active');
+  },
+
   // Get subscription by ID
   getSubscriptionById: (id) => {
     return api.get(`/subscriptions/${id}`);

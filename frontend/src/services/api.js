@@ -72,9 +72,10 @@ api.interceptors.response.use(
     // Handle other errors
     if (error.response) {
       const message = error.response.data?.message || 'An error occurred';
-      
-      // Don't show toast for validation errors (handled in forms)
-      if (error.response.status !== 400) {
+
+      // Don't show toast for validation errors and conflict errors (handled in forms)
+      // 400 = validation errors, 409 = conflict (e.g., user already exists)
+      if (error.response.status !== 400 && error.response.status !== 409) {
         toast.error(message);
       }
       

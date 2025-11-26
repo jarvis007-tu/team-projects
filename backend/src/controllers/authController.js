@@ -132,9 +132,13 @@ class AuthController {
         throw new AppError('Invalid credentials', 401);
       }
 
-      // Check user status
-      if (user.status !== 'active') {
-        throw new AppError(`Account is ${user.status}`, 403);
+      // Check user status - only block 'suspended' and 'blocked' users
+      // 'inactive' users can still log in but may have limited access
+      if (user.status === 'blocked') {
+        throw new AppError('Your account has been blocked. Please contact support.', 403);
+      }
+      if (user.status === 'suspended') {
+        throw new AppError('Your account has been suspended. Please contact support.', 403);
       }
 
       // Reset login attempts
@@ -220,8 +224,12 @@ class AuthController {
 
       // Get user
       const user = await User.findById(decoded.userId);
-      if (!user || user.status !== 'active') {
-        throw new AppError('User not found or inactive', 401);
+      if (!user) {
+        throw new AppError('User not found', 401);
+      }
+      // Only block 'suspended' and 'blocked' users from refreshing tokens
+      if (user.status === 'blocked' || user.status === 'suspended') {
+        throw new AppError(`Account is ${user.status}. Please contact support.`, 401);
       }
 
       // Generate new tokens

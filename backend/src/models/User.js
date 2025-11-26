@@ -58,10 +58,15 @@ const UserSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: {
-      values: ['active', 'inactive', 'suspended'],
+      values: ['active', 'inactive', 'suspended', 'blocked'],
       message: '{VALUE} is not a valid status'
     },
     default: 'active'
+    // Status meanings:
+    // - active: Can log in normally with full access
+    // - inactive: Can still log in but may have limited access
+    // - suspended: Temporarily suspended, cannot log in
+    // - blocked: Permanently blocked, cannot log in
   },
   last_login: {
     type: Date,

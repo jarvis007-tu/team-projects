@@ -44,6 +44,27 @@ const UserManagement = () => {
     role: 'subscriber',
     status: 'active'
   });
+  const [formErrors, setFormErrors] = useState({});
+
+  // Validation helper functions
+  const validateEmail = (email) => {
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return emailRegex.test(email);
+  };
+
+  const validatePhone = (phone) => {
+    // Indian phone number: 10 digits, starts with 6-9
+    const phoneRegex = /^[6-9]\d{9}$/;
+    return phoneRegex.test(phone);
+  };
+
+  const validatePassword = (password) => {
+    // Min 6 chars for admin panel, at least one number, at least one special character
+    const hasMinLength = password.length >= 6;
+    const hasNumber = /\d/.test(password);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/`~]/.test(password);
+    return { hasMinLength, hasNumber, hasSpecialChar, isValid: hasMinLength && hasNumber && hasSpecialChar };
+  };
 
   // Fetch messes only once on mount
   useEffect(() => {
@@ -109,22 +130,91 @@ const UserManagement = () => {
       ...prev,
       [name]: value
     }));
+
+    // Clear error when user starts typing
+    setFormErrors(prev => ({ ...prev, [name]: '' }));
+
+    // Real-time validation feedback
+    if (name === 'email' && value) {
+      if (!validateEmail(value)) {
+        setFormErrors(prev => ({ ...prev, email: 'Please enter a valid email address (e.g., user@example.com)' }));
+      }
+    }
+
+    if (name === 'phone' && value) {
+      if (!validatePhone(value)) {
+        setFormErrors(prev => ({ ...prev, phone: 'Phone number must be 10 digits and start with 6-9 (Indian format)' }));
+      }
+    }
+
+    if (name === 'password' && value) {
+      const pwdValidation = validatePassword(value);
+      if (!pwdValidation.isValid) {
+        let pwdErrors = [];
+        if (!pwdValidation.hasMinLength) pwdErrors.push('minimum 6 characters');
+        if (!pwdValidation.hasNumber) pwdErrors.push('at least one number');
+        if (!pwdValidation.hasSpecialChar) pwdErrors.push('at least one special character');
+        setFormErrors(prev => ({ ...prev, password: `Password must have: ${pwdErrors.join(', ')}` }));
+      }
+    }
+
+    if (name === 'mess_id' && !value) {
+      setFormErrors(prev => ({ ...prev, mess_id: 'Please select the mess' }));
+    }
   }, []); // Empty deps - function never needs to change
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
 
+    // Full validation before submit
+    const newErrors = {};
+
+    // Email validation
+    if (!formData.email) {
+      newErrors.email = 'Email address is required';
+    } else if (!validateEmail(formData.email)) {
+      newErrors.email = 'Please enter a valid email address (e.g., user@example.com)';
+    }
+
+    // Phone validation
+    if (!formData.phone) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!validatePhone(formData.phone)) {
+      newErrors.phone = 'Phone number must be 10 digits and start with 6-9 (Indian format)';
+    }
+
+    // Mess selection validation (Super Admin only)
+    if (isSuperAdmin && !formData.mess_id) {
+      newErrors.mess_id = 'Please select the mess';
+    }
+
+    // Password validation
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else {
+      const pwdValidation = validatePassword(formData.password);
+      if (!pwdValidation.isValid) {
+        let pwdErrors = [];
+        if (!pwdValidation.hasMinLength) pwdErrors.push('minimum 6 characters');
+        if (!pwdValidation.hasNumber) pwdErrors.push('at least one number');
+        if (!pwdValidation.hasSpecialChar) pwdErrors.push('at least one special character');
+        newErrors.password = `Password must have: ${pwdErrors.join(', ')}`;
+      }
+    }
+
+    // If there are validation errors, show them and stop
+    if (Object.keys(newErrors).length > 0) {
+      setFormErrors(newErrors);
+      const firstError = Object.values(newErrors)[0];
+      toast.error(firstError);
+      return;
+    }
+
     try {
       const userData = { ...formData };
 
       // Handle mess_id properly
-      if (isSuperAdmin) {
-        // Super admin must provide mess_id
-        if (!formData.mess_id) {
-          toast.error('Please select a mess');
-          return;
-        }
-      } else {
+      if (!isSuperAdmin) {
         // Mess admin uses their own mess_id
         userData.mess_id = currentUser.mess_id;
       }
@@ -135,12 +225,56 @@ const UserManagement = () => {
       resetForm();
       fetchUsers();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to create user');
+      // Show actual API error message
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to create user';
+      toast.error(errorMessage);
     }
   };
 
   const handleUpdateUser = async (e) => {
     e.preventDefault();
+
+    // Full validation before submit
+    const newErrors = {};
+
+    // Email validation
+    if (!formData.email) {
+      newErrors.email = 'Email address is required';
+    } else if (!validateEmail(formData.email)) {
+      newErrors.email = 'Please enter a valid email address (e.g., user@example.com)';
+    }
+
+    // Phone validation
+    if (!formData.phone) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!validatePhone(formData.phone)) {
+      newErrors.phone = 'Phone number must be 10 digits and start with 6-9 (Indian format)';
+    }
+
+    // Mess selection validation (Super Admin only)
+    if (isSuperAdmin && !formData.mess_id) {
+      newErrors.mess_id = 'Please select the mess';
+    }
+
+    // Password validation (only if provided)
+    if (formData.password) {
+      const pwdValidation = validatePassword(formData.password);
+      if (!pwdValidation.isValid) {
+        let pwdErrors = [];
+        if (!pwdValidation.hasMinLength) pwdErrors.push('minimum 6 characters');
+        if (!pwdValidation.hasNumber) pwdErrors.push('at least one number');
+        if (!pwdValidation.hasSpecialChar) pwdErrors.push('at least one special character');
+        newErrors.password = `Password must have: ${pwdErrors.join(', ')}`;
+      }
+    }
+
+    // If there are validation errors, show them and stop
+    if (Object.keys(newErrors).length > 0) {
+      setFormErrors(newErrors);
+      const firstError = Object.values(newErrors)[0];
+      toast.error(firstError);
+      return;
+    }
 
     try {
       const updateData = { ...formData };
@@ -150,19 +284,15 @@ const UserManagement = () => {
         delete updateData.password;
       }
 
-      // Handle mess_id for super admin
-      if (isSuperAdmin && !updateData.mess_id) {
-        toast.error('Please select a mess');
-        return;
-      }
-
       await userService.updateUser(selectedUser._id || selectedUser.user_id, updateData);
       toast.success('User updated successfully!');
       setShowEditModal(false);
       resetForm();
       fetchUsers();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to update user');
+      // Show actual API error message
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to update user';
+      toast.error(errorMessage);
     }
   };
 
@@ -209,6 +339,7 @@ const UserManagement = () => {
       role: 'subscriber',
       status: 'active'
     });
+    setFormErrors({});
     setSelectedUser(null);
   };
 
@@ -224,8 +355,9 @@ const UserManagement = () => {
   const getStatusBadge = (status) => {
     const badges = {
       active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-      inactive: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
-      suspended: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+      inactive: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+      suspended: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+      blocked: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
     };
     return badges[status] || badges.inactive;
   };
@@ -273,16 +405,19 @@ const UserManagement = () => {
                         name="mess_id"
                         value={formData.mess_id}
                         onChange={handleInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
+                        className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all ${formErrors.mess_id ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                         required
                       >
-                        <option value="">Select Mess</option>
+                        <option value="">Please select the mess</option>
                         {messes.map((mess) => (
                           <option key={mess._id || mess.mess_id} value={mess._id || mess.mess_id}>
                             {mess.name} ({mess.code})
                           </option>
                         ))}
                       </select>
+                      {formErrors.mess_id && (
+                        <p className="text-sm text-red-500 mt-1">{formErrors.mess_id}</p>
+                      )}
                     </div>
                   )}
 
@@ -332,10 +467,14 @@ const UserManagement = () => {
                         name="email"
                         value={formData.email}
                         onChange={handleInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
+                        className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all ${formErrors.email ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                         placeholder="user@example.com"
                         required
                       />
+                      {formErrors.email && (
+                        <p className="text-sm text-red-500 mt-1">{formErrors.email}</p>
+                      )}
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter a valid email with complete domain</p>
                     </div>
 
                     <div>
@@ -347,11 +486,15 @@ const UserManagement = () => {
                         name="phone"
                         value={formData.phone}
                         onChange={handleInputChange}
-                        pattern="[0-9]{10}"
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
-                        placeholder="10 digits"
+                        maxLength={10}
+                        className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all ${formErrors.phone ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
+                        placeholder="10-digit Indian phone number"
                         required
                       />
+                      {formErrors.phone && (
+                        <p className="text-sm text-red-500 mt-1">{formErrors.phone}</p>
+                      )}
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Must be 10 digits, starting with 6-9</p>
                     </div>
                   </div>
 
@@ -367,11 +510,14 @@ const UserManagement = () => {
                         name="password"
                         value={formData.password}
                         onChange={handleInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
-                        placeholder="••••••••"
+                        className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all ${formErrors.password ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
+                        placeholder="Create a strong password"
                         required={!isEdit}
-                        minLength="6"
                       />
+                      {formErrors.password && (
+                        <p className="text-sm text-red-500 mt-1">{formErrors.password}</p>
+                      )}
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Min 6 characters with numbers and special characters</p>
                     </div>
 
                     <div>
@@ -386,9 +532,13 @@ const UserManagement = () => {
                         required
                       >
                         <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
+                        <option value="inactive">Inactive (Limited Access)</option>
                         <option value="suspended">Suspended</option>
+                        <option value="blocked">Blocked</option>
                       </select>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Active: Full access | Inactive: Can log in with limited access | Suspended/Blocked: Cannot log in
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -477,6 +627,7 @@ const UserManagement = () => {
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
             <option value="suspended">Suspended</option>
+            <option value="blocked">Blocked</option>
           </select>
 
           {/* Mess Filter - Super Admin Only */}

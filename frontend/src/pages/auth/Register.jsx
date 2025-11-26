@@ -345,7 +345,7 @@ const Register = () => {
                     disabled={loadingMesses}
                   >
                     <option value="" className="bg-white dark:bg-slate-700 text-gray-900 dark:text-white">
-                      {loadingMesses ? 'Loading messes...' : 'Choose your mess location'}
+                      {loadingMesses ? 'Loading messes...' : 'Please select the mess'}
                     </option>
                     {messes.map((mess) => (
                       <option
@@ -367,6 +367,7 @@ const Register = () => {
                 {errors.mess_id && (
                   <p className="text-sm text-red-500 dark:text-red-400 mt-1">{errors.mess_id}</p>
                 )}
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Please select the mess you want to join</p>
                 {formData.mess_id && (
                   <motion.p
                     initial={{ opacity: 0, y: -10 }}

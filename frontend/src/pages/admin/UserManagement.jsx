@@ -442,6 +442,7 @@ const UserManagement = () => {
                       {formErrors.mess_id && (
                         <p className="text-sm text-red-500 mt-1">{formErrors.mess_id}</p>
                       )}
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Please select the mess for this user</p>
                     </div>
                   )}
 

@@ -322,7 +322,20 @@ const UserManagement = () => {
     }
   };
 
-  const handleDeleteUser = async (userId) => {
+  const handleDeleteUser = async (userId, userRole) => {
+    // Prevent deleting yourself
+    const currentUserId = currentUser?._id || currentUser?.user_id;
+    if (userId === currentUserId) {
+      toast.error('You cannot delete your own account');
+      return;
+    }
+
+    // Mess admins cannot delete other mess admins - only super admin can
+    if (!isSuperAdmin && (userRole === 'mess_admin' || userRole === 'super_admin')) {
+      toast.error('Only Super Admin can delete admin accounts');
+      return;
+    }
+
     if (!window.confirm('Are you sure you want to delete this user?')) {
       return;
     }
@@ -795,13 +808,31 @@ const UserManagement = () => {
                         >
                           <PencilSquareIcon className="w-5 h-5" />
                         </button>
-                        <button
-                          onClick={() => handleDeleteUser(user._id || user.user_id)}
-                          className="p-2.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                          title="Delete User"
-                        >
-                          <TrashIcon className="w-5 h-5" />
-                        </button>
+                        {(() => {
+                          const isCurrentUser = (currentUser?._id || currentUser?.user_id) === (user._id || user.user_id);
+                          const isAdminAndNotSuperAdmin = !isSuperAdmin && (user.role === 'mess_admin' || user.role === 'super_admin');
+                          const isDisabled = isCurrentUser || isAdminAndNotSuperAdmin;
+                          const title = isCurrentUser
+                            ? "Cannot delete your own account"
+                            : isAdminAndNotSuperAdmin
+                              ? "Only Super Admin can delete admin accounts"
+                              : "Delete User";
+
+                          return (
+                            <button
+                              onClick={() => handleDeleteUser(user._id || user.user_id, user.role)}
+                              className={`p-2.5 rounded-lg transition-colors ${
+                                isDisabled
+                                  ? 'text-gray-400 cursor-not-allowed opacity-50'
+                                  : 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
+                              }`}
+                              title={title}
+                              disabled={isDisabled}
+                            >
+                              <TrashIcon className="w-5 h-5" />
+                            </button>
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>

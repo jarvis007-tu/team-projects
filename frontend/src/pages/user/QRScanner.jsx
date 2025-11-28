@@ -13,17 +13,14 @@ const QRScanner = () => {
   const [loading, setLoading] = useState(false);
   const [location, setLocation] = useState(null);
   const [attendanceHistory, setAttendanceHistory] = useState([]);
-  const [todayMeal, setTodayMeal] = useState(null);
   const [showManualLocation, setShowManualLocation] = useState(false);
   const [manualLat, setManualLat] = useState('');
   const [manualLng, setManualLng] = useState('');
-  const [showFileUpload, setShowFileUpload] = useState(false);
   const scannerRef = useRef(null);
   const html5QrcodeScanner = useRef(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    fetchTodayMeal();
     fetchAttendanceHistory();
     getLocation();
 
@@ -33,24 +30,6 @@ const QRScanner = () => {
       }
     };
   }, []);
-
-  const fetchTodayMeal = async () => {
-    try {
-      const response = await attendanceService.getTodayMeal();
-      // Backend returns: { success: true, data: { date, day, menu: { breakfast: {...}, lunch: {...} } } }
-      // Extract items from current meal or all meals
-      const menuData = response.data?.data || response.data;
-      if (menuData?.menu) {
-        // Get current meal type
-        const currentMeal = getMealType().toLowerCase();
-        const mealData = menuData.menu[currentMeal] || menuData.menu.breakfast || Object.values(menuData.menu)[0];
-        setTodayMeal(mealData);
-      }
-    } catch (error) {
-      console.log('Could not fetch today\'s menu:', error);
-      // Error is handled silently as meal info is not critical
-    }
-  };
 
   const fetchAttendanceHistory = async () => {
     try {
@@ -252,7 +231,9 @@ const QRScanner = () => {
       await onScanSuccess(decodedText, { decodedText });
     } catch (error) {
       console.error('❌ Error scanning file:', error);
-      toast.error('Failed to scan QR code from image. Make sure the image contains a valid QR code.');
+      // Show specific error message for invalid/unreadable QR codes
+      setScanError('Invalid QR Code: The uploaded image does not contain a valid mess QR code. Please upload a QR code provided by your mess administrator.');
+      toast.error('Invalid QR Code: Please upload a valid mess QR code image.', { duration: 5000 });
       setLoading(false);
     }
 
@@ -262,14 +243,6 @@ const QRScanner = () => {
     }
   };
 
-  const getMealType = () => {
-    const hour = new Date().getHours();
-    if (hour >= 6 && hour < 11) return 'Breakfast';
-    if (hour >= 11 && hour < 16) return 'Lunch';
-    if (hour >= 18 && hour < 22) return 'Dinner';
-    return 'No meal service';
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50 dark:from-gray-900 dark:via-dark-bg dark:to-gray-900">
       <div className="max-w-4xl mx-auto px-4 py-8">
@@ -277,22 +250,6 @@ const QRScanner = () => {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">QR Scanner</h1>
           <p className="text-gray-600 dark:text-gray-400">Scan your QR code to mark attendance</p>
-        </div>
-
-        {/* Current Meal Info */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Current Meal Service</h3>
-              <p className="text-2xl font-bold text-primary-600 mt-1">{getMealType()}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Today's Menu</p>
-              <p className="font-medium text-gray-900 dark:text-white">
-                {todayMeal?.items ? todayMeal.items.join(', ') : 'Loading...'}
-              </p>
-            </div>
-          </div>
         </div>
 
         {/* Scanner Section */}

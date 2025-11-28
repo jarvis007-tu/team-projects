@@ -3,13 +3,20 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ClockIcon,
-  InformationCircleIcon
+  InformationCircleIcon,
+  BuildingOfficeIcon,
+  EnvelopeIcon,
+  PhoneIcon
 } from '@heroicons/react/24/outline';
 import subscriptionService from '../../services/subscriptionService';
+import messService from '../../services/messService';
+import { useAuth } from '../../contexts/AuthContext';
 
 const Subscription = () => {
+  const { user } = useAuth();
   const [currentSubscription, setCurrentSubscription] = useState(null);
   const [subscriptionHistory, setSubscriptionHistory] = useState([]);
+  const [messInfo, setMessInfo] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,10 +27,18 @@ const Subscription = () => {
     setLoading(true);
     try {
       // Fetch real data from API
-      const [activeRes, historyRes] = await Promise.all([
+      const messId = user?.mess_id?._id || user?.mess_id;
+      const [activeRes, historyRes, messRes] = await Promise.all([
         subscriptionService.getActiveSubscription(),
-        subscriptionService.getMySubscriptions()
+        subscriptionService.getMySubscriptions(),
+        messId ? messService.getMessById(messId).catch(() => null) : Promise.resolve(null)
       ]);
+
+      // Set mess info if available
+      if (messRes) {
+        const mess = messRes.data || messRes;
+        setMessInfo(mess);
+      }
 
       // Get active subscription (may be null if no active subscription)
       const activeSubscription = activeRes.data?.subscription || activeRes.data || null;
@@ -225,6 +240,52 @@ const Subscription = () => {
               <p className="text-yellow-700 dark:text-yellow-300 mt-1">
                 You don't have an active subscription. Please contact the mess administrator to subscribe to the mess services.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mess Contact Information */}
+      {messInfo && (
+        <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-6">
+          <div className="flex items-center mb-4">
+            <BuildingOfficeIcon className="w-6 h-6 text-primary-600 dark:text-primary-400 mr-2" />
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Mess Contact Information</h3>
+          </div>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Contact your mess administrator for subscription inquiries, renewals, or any other assistance.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <div className="flex items-center mb-2">
+                <BuildingOfficeIcon className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Mess Name</p>
+              </div>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">{messInfo.name || 'N/A'}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <div className="flex items-center mb-2">
+                <EnvelopeIcon className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</p>
+              </div>
+              <a
+                href={`mailto:${messInfo.contact_email || ''}`}
+                className="text-lg font-semibold text-primary-600 dark:text-primary-400 hover:underline break-all"
+              >
+                {messInfo.contact_email || 'N/A'}
+              </a>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <div className="flex items-center mb-2">
+                <PhoneIcon className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</p>
+              </div>
+              <a
+                href={`tel:${messInfo.contact_phone || ''}`}
+                className="text-lg font-semibold text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                {messInfo.contact_phone || 'N/A'}
+              </a>
             </div>
           </div>
         </div>

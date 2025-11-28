@@ -55,19 +55,30 @@ class NotificationController {
     try {
       logger.debug('User object:', req.user);
       const userId = req.user.user_id;
-      const { page = 1, limit = 10, is_read } = req.query;
+      const { page = 1, limit = 10, is_read, type } = req.query;
       const skip = (page - 1) * limit;
+
+      // Get user's signup date to filter out notifications from before their signup
+      const user = await User.findById(userId).select('createdAt');
+      const userSignupDate = user?.createdAt || new Date(0);
 
       const queryConditions = {
         $or: [
           { user_id: userId, mess_id: req.user.mess_id },
           { user_id: null, mess_id: req.user.mess_id }, // Mess-specific broadcast
           { user_id: null, mess_id: null } // Global broadcast
-        ]
+        ],
+        // Only show notifications created after user signed up
+        createdAt: { $gte: userSignupDate }
       };
 
       if (is_read !== undefined) {
         queryConditions.is_read = is_read === 'true';
+      }
+
+      // Filter by notification type if provided
+      if (type) {
+        queryConditions.type = type;
       }
 
       const [notifications, count] = await Promise.all([
@@ -80,10 +91,12 @@ class NotificationController {
 
       const unreadCount = await Notification.countDocuments({
         $or: [
-          { user_id: userId },
-          { user_id: null }
+          { user_id: userId, mess_id: req.user.mess_id },
+          { user_id: null, mess_id: req.user.mess_id },
+          { user_id: null, mess_id: null }
         ],
-        is_read: false
+        is_read: false,
+        createdAt: { $gte: userSignupDate }
       });
 
       res.json({

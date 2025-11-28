@@ -11,20 +11,21 @@ import {
   CheckIcon,
   CameraIcon,
   MapPinIcon,
-  CalendarDaysIcon,
   AcademicCapIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
+import authService from '../../services/authService';
+import subscriptionService from '../../services/subscriptionService';
 
-// Validation schemas
+// Validation schemas - room_number and year_of_study are optional (can be blank)
 const profileSchema = yup.object({
   full_name: yup.string().required('Full name is required'),
   email: yup.string().email('Invalid email').required('Email is required'),
   phone: yup.string().matches(/^[0-9]{10}$/, 'Phone number must be 10 digits').required('Phone is required'),
-  room_number: yup.string().required('Room number is required'),
-  hostel_block: yup.string().required('Hostel block is required'),
-  year_of_study: yup.string().required('Year of study is required'),
+  room_number: yup.string(),
+  hostel_block: yup.string(),
+  year_of_study: yup.string(),
   dietary_preferences: yup.string()
 });
 
@@ -41,6 +42,7 @@ const Profile = () => {
   const [loading, setLoading] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
 
   // Profile form
   const { register: registerProfile, handleSubmit: handleSubmitProfile, formState: { errors: profileErrors }, reset: resetProfile } = useForm({
@@ -67,25 +69,31 @@ const Profile = () => {
 
   const fetchUserProfile = async () => {
     try {
-      // Simulated API call - replace with actual service
-      // const response = await userService.getProfile();
-      
-      // Mock profile data for development
-      const mockProfile = {
-        ...user,
-        phone: user?.phone || '9876543210',
-        room_number: user?.room_number || 'A101',
-        hostel_block: user?.hostel_block || 'Block A',
-        year_of_study: user?.year_of_study || '2',
-        dietary_preferences: user?.dietary_preferences || 'Vegetarian',
+      // Use actual user data - don't set mock default values for room_number and year_of_study
+      const profileData = {
+        full_name: user?.full_name || '',
+        email: user?.email || '',
+        phone: user?.phone || '',
+        room_number: user?.room_number || '', // Blank by default
+        hostel_block: user?.hostel_block || '',
+        year_of_study: user?.year_of_study || '', // Blank by default
+        dietary_preferences: user?.dietary_preferences || '',
         profile_image: user?.profile_image || null,
-        created_at: user?.created_at || new Date().toISOString(),
+        created_at: user?.createdAt || user?.created_at,
         status: user?.status || 'active'
       };
-      
-      resetProfile(mockProfile);
-      setProfileImage(mockProfile.profile_image);
-      updateUser(mockProfile);
+
+      resetProfile(profileData);
+      setProfileImage(profileData.profile_image);
+
+      // Check if user has active subscription
+      try {
+        const subResponse = await subscriptionService.getActiveSubscription();
+        const subscription = subResponse.data?.subscription || subResponse.data;
+        setHasActiveSubscription(!!subscription);
+      } catch {
+        setHasActiveSubscription(false);
+      }
     } catch (error) {
       toast.error('Failed to fetch profile');
       console.error('Profile fetch error:', error);
@@ -116,17 +124,26 @@ const Profile = () => {
   const onSubmitPassword = async (data) => {
     setLoading(true);
     try {
-      // Simulated API call - replace with actual service
-      // await userService.changePassword(data);
-      
-      // Mock successful password change
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
-      
+      // Call actual API to change password
+      await authService.changePassword(data.current_password, data.new_password);
+
       toast.success('Password changed successfully');
       setShowPasswordModal(false);
       resetPassword();
     } catch (error) {
-      toast.error('Failed to change password');
+      // Handle specific error messages from backend
+      const errorMessage = error.response?.data?.message ||
+                          error.response?.data?.error?.message ||
+                          'Failed to change password';
+
+      // Check for incorrect password error
+      if (errorMessage.toLowerCase().includes('incorrect') ||
+          errorMessage.toLowerCase().includes('wrong') ||
+          errorMessage.toLowerCase().includes('invalid')) {
+        toast.error('Current password is incorrect');
+      } else {
+        toast.error(errorMessage);
+      }
       console.error('Password change error:', error);
     } finally {
       setLoading(false);
@@ -169,7 +186,8 @@ const Profile = () => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'long'
+      month: 'long',
+      day: 'numeric'
     });
   };
 
@@ -274,7 +292,7 @@ const Profile = () => {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600 dark:text-gray-400">Member Since</span>
                   <span className="text-sm font-medium text-gray-900 dark:text-white">
-                    {formatDate(user?.created_at)}
+                    {formatDate(user?.createdAt || user?.created_at)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -285,7 +303,11 @@ const Profile = () => {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600 dark:text-gray-400">Subscription</span>
-                  <span className="text-sm font-medium text-primary-600 dark:text-primary-400">Active</span>
+                  {hasActiveSubscription ? (
+                    <span className="text-sm font-medium text-green-600 dark:text-green-400">Active</span>
+                  ) : (
+                    <span className="text-sm font-medium text-red-600 dark:text-red-400">Inactive</span>
+                  )}
                 </div>
               </div>
             </div>

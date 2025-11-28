@@ -131,24 +131,30 @@ const Dashboard = () => {
         {/* Subscription Status */}
         <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
-              <CreditCardIcon className="h-6 w-6 text-green-600 dark:text-green-400" />
+            <div className={`w-12 h-12 ${dashboardData.subscription ? 'bg-green-100 dark:bg-green-900/20' : 'bg-red-100 dark:bg-red-900/20'} rounded-lg flex items-center justify-center`}>
+              <CreditCardIcon className={`h-6 w-6 ${dashboardData.subscription ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
             </div>
-            <span className="text-xs font-medium text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20 px-2 py-1 rounded-full">
-              Active
-            </span>
+            {dashboardData.subscription ? (
+              <span className="text-xs font-medium text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20 px-2 py-1 rounded-full">
+                Active
+              </span>
+            ) : (
+              <span className="text-xs font-medium text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/20 px-2 py-1 rounded-full">
+                No Subscription
+              </span>
+            )}
           </div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-            {dashboardData.subscription?.plan_type || 'Basic'} Plan
+            {dashboardData.subscription?.plan_type ? `${dashboardData.subscription.plan_type} Plan` : 'No Plan'}
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            {dashboardData.subscription?.days_remaining || 0} days remaining
+            {dashboardData.subscription ? `${dashboardData.subscription.days_remaining || 0} days remaining` : 'Subscribe to access meals'}
           </p>
-          <Link 
-            to="/user/subscription" 
+          <Link
+            to="/user/subscription"
             className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 mt-2 inline-block"
           >
-            Manage Subscription →
+            {dashboardData.subscription ? 'Manage Subscription →' : 'Get Subscription →'}
           </Link>
         </div>
 

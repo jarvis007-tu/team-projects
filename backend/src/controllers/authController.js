@@ -1,4 +1,4 @@
-const { User, Subscription, Mess } = require('../models');
+const { User, Subscription, Mess, Notification } = require('../models');
 const jwtManager = require('../utils/jwt');
 const { redisClient } = require('../config/redis-optional');
 const logger = require('../utils/logger');
@@ -75,6 +75,22 @@ class AuthController {
 
       // Store refresh token
       await jwtManager.storeRefreshToken(user._id.toString(), tokens.refreshToken);
+
+      // Create welcome notification for the new user
+      try {
+        await Notification.create({
+          user_id: user._id,
+          mess_id: mess._id,
+          title: 'Welcome to Hostel Eats!',
+          message: `Hi ${full_name}, welcome to ${mess.name}! Your account has been created successfully. Please contact the mess administrator to set up your subscription and start enjoying our meal services.`,
+          type: 'announcement',
+          priority: 'medium',
+          status: 'sent'
+        });
+      } catch (notificationError) {
+        // Don't fail registration if notification fails
+        logger.warn('Failed to create welcome notification:', notificationError.message);
+      }
 
       // Log registration
       logger.info(`New user registered: ${user._id} - ${user.email}`);
@@ -341,15 +357,11 @@ class AuthController {
         throw new AppError('Email is required', 400);
       }
 
-      const user = await User.findOne({ email });
+      const user = await User.findOne({ email, deleted_at: null });
 
       if (!user) {
-        // Don't reveal if user exists
-        res.json({
-          success: true,
-          message: 'If the email exists, a reset link has been sent'
-        });
-        return;
+        // Return specific error message when email is not found
+        throw new AppError('No account found with this email address. Please check the email or register a new account.', 404);
       }
 
       // Generate reset token

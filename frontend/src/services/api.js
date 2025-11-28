@@ -71,11 +71,19 @@ api.interceptors.response.use(
     
     // Handle other errors
     if (error.response) {
-      const message = error.response.data?.message || 'An error occurred';
+      const message = error.response.data?.message ||
+                      error.response.data?.error?.message ||
+                      'An error occurred';
 
-      // Don't show toast for validation errors and conflict errors (handled in forms)
-      // 400 = validation errors, 409 = conflict (e.g., user already exists)
-      if (error.response.status !== 400 && error.response.status !== 409) {
+      // Check if this is a deleted account error (403 with deleted message)
+      const isDeletedAccountError = error.response.status === 403 &&
+        (message.toLowerCase().includes('deleted') || message.toLowerCase().includes('account has been deleted'));
+
+      // Don't show toast for:
+      // - 400 = validation errors (handled in forms)
+      // - 409 = conflict errors (e.g., user already exists)
+      // - 403 deleted account errors (handled by redirect to /account-deleted page)
+      if (error.response.status !== 400 && error.response.status !== 409 && !isDeletedAccountError) {
         toast.error(message);
       }
       

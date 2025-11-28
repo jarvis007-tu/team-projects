@@ -386,6 +386,19 @@ const UserManagement = () => {
     return badges[status] || badges.inactive;
   };
 
+  // Get subscription-based status for subscribers
+  const getSubscriptionStatus = (user) => {
+    // For admins, show account status
+    if (user.role === 'super_admin' || user.role === 'mess_admin') {
+      return { status: user.status, label: user.status?.toUpperCase() };
+    }
+    // For subscribers, show subscription status
+    if (user.has_active_subscription) {
+      return { status: 'active', label: 'ACTIVE' };
+    }
+    return { status: 'inactive', label: 'INACTIVE' };
+  };
+
   const UserFormModal = useMemo(() => {
     const isEdit = showEditModal;
 
@@ -745,9 +758,14 @@ const UserManagement = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusBadge(user.status)}`}>
-                        {user.status?.toUpperCase()}
-                      </span>
+                      {(() => {
+                        const subStatus = getSubscriptionStatus(user);
+                        return (
+                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusBadge(subStatus.status)}`}>
+                            {subStatus.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">

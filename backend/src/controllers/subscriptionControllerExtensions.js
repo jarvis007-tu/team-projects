@@ -239,16 +239,52 @@ const subscriptionExtensions = {
         ? ((cancelledSubscriptions / totalSubscriptions) * 100).toFixed(2)
         : 0;
 
-      // Get active vs inactive
-      const [activeCount, inactiveCount, expiredCount] = await Promise.all([
-        Subscription.countDocuments({ status: 'active' }),
-        Subscription.countDocuments({ status: 'inactive' }),
-        Subscription.countDocuments({ status: 'expired' })
+      // Get active vs inactive vs expired counts
+      const today = new Date();
+      const sevenDaysFromNow = new Date();
+      sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+
+      const [activeCount, inactiveCount, expiredCount, expiringSoonCount, totalCount, monthlyRevenue] = await Promise.all([
+        Subscription.countDocuments({ status: 'active', deleted_at: null }),
+        Subscription.countDocuments({ status: 'inactive', deleted_at: null }),
+        Subscription.countDocuments({ status: 'expired', deleted_at: null }),
+        // Expiring soon: active subscriptions ending within 7 days
+        Subscription.countDocuments({
+          status: 'active',
+          deleted_at: null,
+          end_date: { $gte: today, $lte: sevenDaysFromNow }
+        }),
+        // Total subscriptions (non-deleted)
+        Subscription.countDocuments({ deleted_at: null }),
+        // Monthly revenue from active paid subscriptions
+        Subscription.aggregate([
+          {
+            $match: {
+              status: 'active',
+              payment_status: 'paid',
+              deleted_at: null
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: '$amount' }
+            }
+          }
+        ])
       ]);
+
+      const revenue = monthlyRevenue.length > 0 ? monthlyRevenue[0].total : 0;
 
       res.json({
         success: true,
         data: {
+          // Fields expected by frontend stats cards
+          total: totalCount,
+          active: activeCount,
+          expiringSoon: expiringSoonCount,
+          monthlyRevenue: revenue,
+          // Additional data
           period,
           trends,
           byPlanType,

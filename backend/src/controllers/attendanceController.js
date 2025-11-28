@@ -590,10 +590,11 @@ class AttendanceController {
       }
 
       if (date) {
+        // Filter by scan_date - use date range for the entire day
         const targetDate = moment(date);
-        filter.scan_time = {
-          $gte: targetDate.startOf('day').toDate(),
-          $lte: targetDate.endOf('day').toDate()
+        filter.scan_date = {
+          $gte: targetDate.clone().startOf('day').toDate(),
+          $lte: targetDate.clone().endOf('day').toDate()
         };
       }
 
@@ -634,9 +635,9 @@ class AttendanceController {
       const targetDate = moment(date);
 
       const attendance = await Attendance.find({
-        scan_time: {
-          $gte: targetDate.startOf('day').toDate(),
-          $lte: targetDate.endOf('day').toDate()
+        scan_date: {
+          $gte: targetDate.clone().startOf('day').toDate(),
+          $lte: targetDate.clone().endOf('day').toDate()
         }
       })
         .populate('user_id', 'user_id full_name email phone')
@@ -651,7 +652,7 @@ class AttendanceController {
       res.json({
         success: true,
         data: {
-          date: targetDate.format('YYYY-MM-DD'),
+          date: moment(date).format('YYYY-MM-DD'),
           attendance,
           summary: {
             breakfast: summary.breakfast.length,

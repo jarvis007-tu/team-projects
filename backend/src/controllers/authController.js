@@ -101,21 +101,26 @@ class AuthController {
         throw new AppError('Email/Phone and password are required', 400);
       }
 
-      // Build query for email or phone
-      const query = { deleted_at: null };
+      // Build query for email or phone (without deleted_at filter first to check for deleted accounts)
+      const identityQuery = {};
       if (email && phone) {
-        query.$or = [{ email }, { phone }];
+        identityQuery.$or = [{ email }, { phone }];
       } else if (email) {
-        query.email = email;
+        identityQuery.email = email;
       } else if (phone) {
-        query.phone = phone;
+        identityQuery.phone = phone;
       }
 
       // Find user - need password for validation
-      const user = await User.findOne(query).select('+password').populate('mess_id', 'name code');
+      const user = await User.findOne(identityQuery).select('+password').populate('mess_id', 'name code');
 
       if (!user) {
         throw new AppError('Invalid credentials', 401);
+      }
+
+      // Check if account has been deleted
+      if (user.deleted_at) {
+        throw new AppError('Your account has been deleted by the administrator. Please contact support if you believe this is an error.', 403);
       }
 
       // Check if account is locked

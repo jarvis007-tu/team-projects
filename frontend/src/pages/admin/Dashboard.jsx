@@ -242,7 +242,7 @@ const Dashboard = () => {
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
                 <button
-                  onClick={() => navigate('/admin/notifications')}
+                  onClick={() => navigate('/admin/attendance')}
                   className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors"
                 >
                   View All

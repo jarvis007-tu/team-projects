@@ -85,8 +85,22 @@ export const AuthProvider = ({ children }) => {
       
       return response;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || 'Login failed';
-      toast.error(message);
+      // Handle both development and production error structures
+      const message = error.response?.data?.message ||
+                      error.response?.data?.error?.message ||
+                      error.message ||
+                      'Login failed';
+
+      // Check if the error is about a deleted account (403 with specific message)
+      const isDeletedAccount = error.response?.status === 403 &&
+        (message.toLowerCase().includes('deleted') || message.toLowerCase().includes('account has been deleted'));
+
+      if (isDeletedAccount) {
+        // Redirect to account deleted page instead of showing toast
+        navigate('/account-deleted', { replace: true });
+      } else {
+        toast.error(message);
+      }
       throw error;
     }
   };
@@ -108,7 +122,11 @@ export const AuthProvider = ({ children }) => {
       
       return response;
     } catch (error) {
-      const message = error.response?.data?.message || 'Registration failed';
+      // Handle both development and production error structures
+      const message = error.response?.data?.message ||
+                      error.response?.data?.error?.message ||
+                      error.message ||
+                      'Registration failed';
       toast.error(message);
       throw error;
     }
@@ -140,7 +158,11 @@ export const AuthProvider = ({ children }) => {
       toast.success('Profile updated successfully');
       return response;
     } catch (error) {
-      const message = error.response?.data?.message || 'Profile update failed';
+      // Handle both development and production error structures
+      const message = error.response?.data?.message ||
+                      error.response?.data?.error?.message ||
+                      error.message ||
+                      'Profile update failed';
       toast.error(message);
       throw error;
     }

@@ -186,7 +186,7 @@ class EmailService {
 
   async sendSubscriptionNotification(email, name, subscriptionDetails) {
     const { plan_type, start_date, end_date, amount } = subscriptionDetails;
-    
+
     const html = `
       <!DOCTYPE html>
       <html>
@@ -230,6 +230,71 @@ class EmailService {
     return this.sendEmail({
       to: email,
       subject: 'Subscription Updated - Hostel Mess Management',
+      html
+    });
+  }
+
+  async sendAccountDeletionEmail(email, name) {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Account Deleted - Hostel Mess Management</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #ef4444; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; background: #f9f9f9; }
+          .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Account Deletion Notice</h1>
+          </div>
+          <div class="content">
+            <p>Hello ${name},</p>
+            <p>We regret to inform you that your account on the Hostel Mess Management System has been deleted by the administrator.</p>
+            <p>As a result:</p>
+            <ul>
+              <li>You will no longer be able to log in to your account</li>
+              <li>Your subscription and meal access have been revoked</li>
+              <li>Your attendance history has been archived</li>
+            </ul>
+            <p>If you believe this was done in error or have any questions, please contact the mess administrator or support team for assistance.</p>
+            <p>We thank you for being part of our system.</p>
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} Hostel Mess Management System</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+      Account Deletion Notice
+
+      Hello ${name},
+
+      We regret to inform you that your account on the Hostel Mess Management System has been deleted by the administrator.
+
+      As a result:
+      - You will no longer be able to log in to your account
+      - Your subscription and meal access have been revoked
+      - Your attendance history has been archived
+
+      If you believe this was done in error or have any questions, please contact the mess administrator or support team for assistance.
+
+      We thank you for being part of our system.
+    `;
+
+    return this.sendEmail({
+      to: email,
+      subject: 'Account Deleted - Hostel Mess Management',
+      text,
       html
     });
   }

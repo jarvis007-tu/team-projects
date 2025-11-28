@@ -5,6 +5,7 @@ const Subscription = require('../models/Subscription');
 const logger = require('../utils/logger');
 const { uploadToS3 } = require('../services/storageService');
 const csvParser = require('csv-parse/sync');
+const emailService = require('../utils/emailService');
 
 class UserController {
   // Get all users (Admin only)
@@ -24,6 +25,8 @@ class UserController {
       } else {
         // Mess admin and subscribers can only see their own mess users
         queryConditions.mess_id = req.user.mess_id;
+        // Mess admins should never see super_admin users in their list
+        queryConditions.role = { $ne: 'super_admin' };
       }
 
       if (search) {
@@ -34,7 +37,26 @@ class UserController {
         ];
       }
 
-      if (role) queryConditions.role = role;
+      // Handle role filtering
+      if (role) {
+        // If mess_admin is requesting and trying to filter by role
+        if (req.user.role !== 'super_admin') {
+          // Mess admin can't see super_admin even if they try to filter by it
+          if (role === 'super_admin') {
+            // Return empty result - mess admin can't view super_admins
+            return res.json({
+              success: true,
+              data: {
+                users: [],
+                pagination: { total: 0, page: parseInt(page), pages: 0 }
+              }
+            });
+          }
+          queryConditions.role = role;
+        } else {
+          queryConditions.role = role;
+        }
+      }
       if (status) queryConditions.status = status;
 
       const [users, count] = await Promise.all([
@@ -47,10 +69,38 @@ class UserController {
         User.countDocuments(queryConditions)
       ]);
 
+      // Get subscription status for each user (only for subscribers)
+      const today = new Date();
+      const userIds = users.filter(u => u.role === 'subscriber').map(u => u._id);
+
+      const activeSubscriptions = await Subscription.find({
+        user_id: { $in: userIds },
+        status: 'active',
+        payment_status: 'paid',
+        start_date: { $lte: today },
+        end_date: { $gte: today },
+        deleted_at: null
+      }).select('user_id');
+
+      const activeUserIds = new Set(activeSubscriptions.map(s => s.user_id.toString()));
+
+      // Add has_active_subscription flag to each user
+      const usersWithSubscriptionStatus = users.map(user => {
+        const userObj = user.toJSON();
+        // For subscribers, check if they have an active subscription
+        if (user.role === 'subscriber') {
+          userObj.has_active_subscription = activeUserIds.has(user._id.toString());
+        } else {
+          // Admins don't need subscription status
+          userObj.has_active_subscription = true;
+        }
+        return userObj;
+      });
+
       res.json({
         success: true,
         data: {
-          users,
+          users: usersWithSubscriptionStatus,
           pagination: {
             total: count,
             page: parseInt(page),
@@ -304,9 +354,26 @@ class UserController {
         });
       }
 
+      // Store user info before deletion for email
+      const userEmail = user.email;
+      const userName = user.full_name;
+
       await user.softDelete(); // Soft delete using plugin
 
       logger.info(`User ${user._id} deleted by ${req.user.role}: ${req.user.user_id}`);
+
+      // Send account deletion email notification (async, don't wait)
+      emailService.sendAccountDeletionEmail(userEmail, userName)
+        .then(result => {
+          if (result.success) {
+            logger.info(`Account deletion email sent to ${userEmail}`);
+          } else {
+            logger.warn(`Failed to send account deletion email to ${userEmail}: ${result.error}`);
+          }
+        })
+        .catch(err => {
+          logger.error(`Error sending account deletion email to ${userEmail}:`, err);
+        });
 
       res.json({
         success: true,

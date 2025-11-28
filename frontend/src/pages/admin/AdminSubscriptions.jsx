@@ -61,9 +61,14 @@ const AdminSubscriptions = () => {
         mess_id: filterMess !== 'all' ? filterMess : undefined,
         expiring_soon: filterExpiringSoon ? 'true' : undefined
       });
-      setSubscriptions(response.data.subscriptions);
-      setTotalPages(response.data.pagination.pages);
+      console.log('Subscriptions response:', response); // Debug log
+      // Handle response - axios interceptor unwraps response.data, so response is { success, data: {...} }
+      const subscriptionsData = response?.data?.subscriptions || response?.subscriptions || [];
+      const paginationData = response?.data?.pagination || response?.pagination || { pages: 1 };
+      setSubscriptions(subscriptionsData);
+      setTotalPages(paginationData.pages || 1);
     } catch (error) {
+      console.error('Failed to fetch subscriptions:', error);
       toast.error('Failed to fetch subscriptions');
     } finally {
       setLoading(false);
@@ -82,9 +87,16 @@ const AdminSubscriptions = () => {
   const fetchAnalytics = async () => {
     try {
       const response = await subscriptionService.getSubscriptionAnalytics();
-      setAnalytics(response.data);
+      console.log('Analytics response:', response); // Debug log
+      // Handle the response - check if data exists
+      if (response && response.data) {
+        setAnalytics(response.data);
+      } else if (response) {
+        // If response is already the data object (no nested data)
+        setAnalytics(response);
+      }
     } catch (error) {
-      console.error('Failed to fetch analytics');
+      console.error('Failed to fetch analytics:', error);
     }
   };
 
@@ -852,11 +864,13 @@ const AdminSubscriptions = () => {
                   <input
                     type="number"
                     value={newSubscription.amount}
-                    onChange={(e) => setNewSubscription({...newSubscription, amount: parseInt(e.target.value) || 0})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300 cursor-not-allowed"
                     min="0"
-                    required
                   />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Amount is auto-calculated based on plan type
+                  </p>
                 </div>
 
                 {/* Payment Row */}

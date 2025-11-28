@@ -38,6 +38,7 @@ router.get('/user/:userId/summary', authorize('super_admin', 'mess_admin'), atte
 router.get('/meal-wise', authorize('super_admin', 'mess_admin'), attendanceController.getMealWiseAttendance);
 router.get('/trends', authorize('super_admin', 'mess_admin'), attendanceController.getAttendanceTrends);
 router.get('/missing-alerts', authorize('super_admin', 'mess_admin'), attendanceController.getMissingAttendanceAlerts);
+router.get('/meal-prediction', authorize('super_admin', 'mess_admin'), attendanceController.getMealPrediction);
 
 // Reports
 router.get('/export', authorize('super_admin', 'mess_admin'), attendanceController.exportAttendanceReport);

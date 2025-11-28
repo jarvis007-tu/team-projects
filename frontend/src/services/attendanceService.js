@@ -64,6 +64,11 @@ const attendanceService = {
     return api.get('/attendance/missing-alerts');
   },
 
+  // Get meal prediction statistics (day-wise attendance ratio)
+  getMealPrediction: (weeks = 4) => {
+    return api.get('/attendance/meal-prediction', { params: { weeks } });
+  },
+
   // Scan QR code for attendance
   scanQR: (data) => {
     return api.post('/attendance/scan', data);

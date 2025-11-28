@@ -38,24 +38,37 @@ api.interceptors.response.use(
   (response) => response.data,
   async (error) => {
     const originalRequest = error.config;
-    
+
     // Check if using mock authentication
     const isUsingMockAuth = localStorage.getItem('accessToken')?.startsWith('mock_');
-    
-    // Handle token refresh - but skip for development mock mode
-    if (error.response?.status === 401 && !originalRequest._retry && !isUsingMockAuth) {
+
+    // Auth endpoints that should NOT trigger token refresh on 401
+    // (401 on these endpoints means wrong credentials, not expired token)
+    const authEndpoints = [
+      '/auth/login',
+      '/auth/change-password',
+      '/auth/forgot-password',
+      '/auth/reset-password',
+      '/auth/register'
+    ];
+    const isAuthEndpoint = authEndpoints.some(endpoint => originalRequest?.url?.includes(endpoint));
+
+    // Handle token refresh - but skip for:
+    // - Development mock mode
+    // - Auth endpoints where 401 means wrong credentials
+    if (error.response?.status === 401 && !originalRequest._retry && !isUsingMockAuth && !isAuthEndpoint) {
       originalRequest._retry = true;
-      
+
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
           const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
             refreshToken,
           });
-          
+
           const { accessToken } = response.data.data.tokens;
           localStorage.setItem('accessToken', accessToken);
-          
+
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           return api(originalRequest);
         }
@@ -68,7 +81,7 @@ api.interceptors.response.use(
         return Promise.reject(refreshError);
       }
     }
-    
+
     // Handle other errors
     if (error.response) {
       const message = error.response.data?.message ||
@@ -81,12 +94,14 @@ api.interceptors.response.use(
 
       // Don't show toast for:
       // - 400 = validation errors (handled in forms)
+      // - 401 = unauthorized (handled by specific endpoints like login, change-password)
       // - 409 = conflict errors (e.g., user already exists)
       // - 403 deleted account errors (handled by redirect to /account-deleted page)
-      if (error.response.status !== 400 && error.response.status !== 409 && !isDeletedAccountError) {
+      const skipToastStatuses = [400, 401, 409];
+      if (!skipToastStatuses.includes(error.response.status) && !isDeletedAccountError) {
         toast.error(message);
       }
-      
+
       // Log errors only in development mode
       if (import.meta.env.DEV && import.meta.env.MODE !== 'production') {
         console.debug('API Error:', error.response);
@@ -96,7 +111,7 @@ api.interceptors.response.use(
     } else {
       toast.error('An unexpected error occurred');
     }
-    
+
     return Promise.reject(error);
   }
 );

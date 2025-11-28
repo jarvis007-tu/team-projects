@@ -150,7 +150,7 @@ class AuthController {
 
       if (!isValidPassword) {
         await user.incrementLoginAttempts();
-        throw new AppError('Invalid credentials', 401);
+        throw new AppError('Incorrect password', 401);
       }
 
       // Check user status - only block 'suspended' and 'blocked' users

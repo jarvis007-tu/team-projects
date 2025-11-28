@@ -11,7 +11,7 @@ class UserController {
   // Get all users (Admin only)
   async getAllUsers(req, res) {
     try {
-      const { page = 1, limit = 10, search, role, status, mess_id } = req.query;
+      const { page = 1, limit = 10, search, role, status, subscription_status, mess_id } = req.query;
       const skip = (page - 1) * limit;
 
       const queryConditions = { deleted_at: null };
@@ -58,6 +58,56 @@ class UserController {
         }
       }
       if (status) queryConditions.status = status;
+
+      // For subscription_status filter, we need to first get subscriber IDs with/without active subscriptions
+      let subscriberIdsToFilter = null;
+      if (subscription_status && (subscription_status === 'subscribed' || subscription_status === 'not_subscribed')) {
+        const today = new Date();
+        const messFilter = {};
+        if (req.user.role === 'super_admin' && mess_id) {
+          messFilter.mess_id = mess_id;
+        } else if (req.user.role !== 'super_admin') {
+          messFilter.mess_id = req.user.mess_id;
+        }
+
+        // Get all active subscriptions
+        const activeSubscriptions = await Subscription.find({
+          ...messFilter,
+          status: 'active',
+          payment_status: 'paid',
+          start_date: { $lte: today },
+          end_date: { $gte: today },
+          deleted_at: null
+        }).select('user_id');
+
+        const activeSubscriberIds = new Set(activeSubscriptions.map(s => s.user_id.toString()));
+
+        if (subscription_status === 'subscribed') {
+          // Only show users with active subscriptions (subscribers only)
+          subscriberIdsToFilter = Array.from(activeSubscriberIds);
+          if (subscriberIdsToFilter.length === 0) {
+            // No active subscribers, return empty
+            return res.json({
+              success: true,
+              data: {
+                users: [],
+                pagination: { total: 0, page: parseInt(page), pages: 0 }
+              }
+            });
+          }
+          queryConditions._id = { $in: subscriberIdsToFilter };
+          // Subscription status filter only applies to subscribers
+          if (!role) {
+            queryConditions.role = 'subscriber';
+          }
+        } else if (subscription_status === 'not_subscribed') {
+          // Only show subscribers without active subscriptions
+          queryConditions.role = 'subscriber';
+          if (activeSubscriberIds.size > 0) {
+            queryConditions._id = { $nin: Array.from(activeSubscriberIds) };
+          }
+        }
+      }
 
       const [users, count] = await Promise.all([
         User.find(queryConditions)

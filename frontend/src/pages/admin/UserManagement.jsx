@@ -29,6 +29,7 @@ const UserManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterSubscriptionStatus, setFilterSubscriptionStatus] = useState('all');
   const [filterMess, setFilterMess] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -78,7 +79,7 @@ const UserManagement = () => {
     }, 300);
 
     return () => clearTimeout(debounceTimer);
-  }, [currentPage, searchTerm, filterRole, filterStatus, filterMess]);
+  }, [currentPage, searchTerm, filterRole, filterStatus, filterSubscriptionStatus, filterMess]);
 
   const fetchMesses = async () => {
     try {
@@ -111,6 +112,7 @@ const UserManagement = () => {
       if (searchTerm) params.search = searchTerm;
       if (filterRole !== 'all') params.role = filterRole;
       if (filterStatus !== 'all') params.status = filterStatus;
+      if (filterSubscriptionStatus !== 'all') params.subscription_status = filterSubscriptionStatus;
       if (filterMess !== 'all') params.mess_id = filterMess;
 
       const response = await userService.getAllUsers(params);
@@ -630,7 +632,7 @@ const UserManagement = () => {
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {/* Search */}
           <div className="relative">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -655,17 +657,28 @@ const UserManagement = () => {
             <option value="subscriber">Subscriber</option>
           </select>
 
-          {/* Status Filter */}
+          {/* Account Status Filter (User's account status) */}
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white"
           >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="all">All Account Status</option>
+            <option value="active">Active Account</option>
+            <option value="inactive">Inactive Account</option>
             <option value="suspended">Suspended</option>
             <option value="blocked">Blocked</option>
+          </select>
+
+          {/* Subscription Status Filter (For subscribers only) */}
+          <select
+            value={filterSubscriptionStatus}
+            onChange={(e) => setFilterSubscriptionStatus(e.target.value)}
+            className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white"
+          >
+            <option value="all">All Subscription Status</option>
+            <option value="subscribed">Active Subscription</option>
+            <option value="not_subscribed">No Active Subscription</option>
           </select>
 
           {/* Mess Filter - Super Admin Only */}
@@ -715,7 +728,8 @@ const UserManagement = () => {
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Contact</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Mess</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Account</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Subscription</th>
                   <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -755,6 +769,11 @@ const UserManagement = () => {
                     <td className="px-6 py-4">
                       <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getRoleBadge(user.role)}`}>
                         {user.role?.replace('_', ' ').toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusBadge(user.status)}`}>
+                        {user.status?.toUpperCase() || 'N/A'}
                       </span>
                     </td>
                     <td className="px-6 py-4">

@@ -1,10 +1,11 @@
 const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const logger = require('../utils/logger');
+const mongoose = require('mongoose');
 
 // Extension methods for subscription controller
 const subscriptionExtensions = {
-  // Delete subscription
+  // Delete subscription (soft delete)
   async deleteSubscription(req, res) {
     try {
       const { id } = req.params;
@@ -18,7 +19,10 @@ const subscriptionExtensions = {
         });
       }
 
-      await subscription.remove();
+      // Soft delete - set deleted_at timestamp
+      await Subscription.findByIdAndUpdate(id, { deleted_at: new Date() });
+
+      logger.info(`Subscription ${id} soft deleted`);
 
       res.json({
         success: true,
@@ -45,9 +49,17 @@ const subscriptionExtensions = {
         });
       }
 
+      // Convert string IDs to ObjectIds
+      const objectIds = ids.map(id => {
+        if (mongoose.Types.ObjectId.isValid(id)) {
+          return new mongoose.Types.ObjectId(id);
+        }
+        return id;
+      });
+
       const result = await Subscription.updateMany(
         {
-          subscription_id: { $in: ids }
+          _id: { $in: objectIds }
         },
         { $set: updateData }
       );
@@ -174,7 +186,7 @@ const subscriptionExtensions = {
         {
           $match: {
             createdAt: { $gte: startDate },
-            deletedAt: null
+            deleted_at: null
           }
         },
         {
@@ -227,16 +239,52 @@ const subscriptionExtensions = {
         ? ((cancelledSubscriptions / totalSubscriptions) * 100).toFixed(2)
         : 0;
 
-      // Get active vs inactive
-      const [activeCount, inactiveCount, expiredCount] = await Promise.all([
-        Subscription.countDocuments({ status: 'active' }),
-        Subscription.countDocuments({ status: 'inactive' }),
-        Subscription.countDocuments({ status: 'expired' })
+      // Get active vs inactive vs expired counts
+      const today = new Date();
+      const sevenDaysFromNow = new Date();
+      sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+
+      const [activeCount, inactiveCount, expiredCount, expiringSoonCount, totalCount, monthlyRevenue] = await Promise.all([
+        Subscription.countDocuments({ status: 'active', deleted_at: null }),
+        Subscription.countDocuments({ status: 'inactive', deleted_at: null }),
+        Subscription.countDocuments({ status: 'expired', deleted_at: null }),
+        // Expiring soon: active subscriptions ending within 7 days
+        Subscription.countDocuments({
+          status: 'active',
+          deleted_at: null,
+          end_date: { $gte: today, $lte: sevenDaysFromNow }
+        }),
+        // Total subscriptions (non-deleted)
+        Subscription.countDocuments({ deleted_at: null }),
+        // Monthly revenue from active paid subscriptions
+        Subscription.aggregate([
+          {
+            $match: {
+              status: 'active',
+              payment_status: 'paid',
+              deleted_at: null
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: '$amount' }
+            }
+          }
+        ])
       ]);
+
+      const revenue = monthlyRevenue.length > 0 ? monthlyRevenue[0].total : 0;
 
       res.json({
         success: true,
         data: {
+          // Fields expected by frontend stats cards
+          total: totalCount,
+          active: activeCount,
+          expiringSoon: expiringSoonCount,
+          monthlyRevenue: revenue,
+          // Additional data
           period,
           trends,
           byPlanType,
@@ -283,7 +331,7 @@ const subscriptionExtensions = {
       if (format === 'csv') {
         const csv = 'ID,User,Email,Plan,Amount,Status,Start Date,End Date\n' +
           subscriptions.map(s =>
-            `${s.subscription_id},"${s.user_id?.full_name || ''}","${s.user_id?.email || ''}","${s.plan_type}",${s.amount},"${s.status}","${s.start_date}","${s.end_date}"`
+            `${s._id || s.subscription_id},"${s.user_id?.full_name || ''}","${s.user_id?.email || ''}","${s.plan_type}",${s.amount},"${s.status}","${s.start_date}","${s.end_date}"`
           ).join('\n');
 
         res.setHeader('Content-Type', 'text/csv');

@@ -8,6 +8,7 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 const Login = lazy(() => import('./pages/auth/LoginNew'));
 const Register = lazy(() => import('./pages/auth/Register'));
 const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
+const AccountDeleted = lazy(() => import('./pages/auth/AccountDeleted'));
 
 // Admin Pages
 const AdminLayout = lazy(() => import('./layouts/AdminLayout'));
@@ -63,6 +64,7 @@ function App() {
         />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/account-deleted" element={<AccountDeleted />} />
 
         {/* Admin Routes */}
         <Route

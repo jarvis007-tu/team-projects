@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   FiUser, FiBell, FiShield, FiKey, FiSave,
   FiUpload, FiEdit2, FiTrash2, FiEye, FiEyeOff,
   FiMoon, FiSun, FiGlobe, FiSmartphone
 } from 'react-icons/fi';
 import { MdSecurity, MdNotifications, MdPalette, MdLanguage } from 'react-icons/md';
 import userService from '../services/userService';
+import authService from '../services/authService';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 
@@ -86,7 +87,7 @@ const Settings = () => {
           bio: user.bio || '',
           date_of_birth: user.date_of_birth || '',
           address: user.address || '',
-          avatar: user.avatar_url
+          avatar: user.profile_image || user.avatar_url || null
         });
       }
 
@@ -193,18 +194,48 @@ const Settings = () => {
 
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      try {
-        setLoading(true);
-        await userService.uploadProfilePicture(file);
-        toast.success('Profile picture updated');
-        // Refresh user data
-        fetchUserData();
-      } catch (error) {
-        toast.error('Failed to upload profile picture');
-      } finally {
-        setLoading(false);
-      }
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Please upload a valid image (JPEG, PNG, GIF, or WebP)');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size should be less than 2MB');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Convert file to base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Upload to API
+      const response = await authService.uploadProfileImage(base64);
+      const imageData = response.data?.profile_image || base64;
+
+      setProfile({ ...profile, avatar: imageData });
+      // Update localStorage
+      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      localStorage.setItem('user', JSON.stringify({ ...storedUser, profile_image: imageData }));
+
+      toast.success('Profile picture updated');
+    } catch (error) {
+      const errorMessage = error.response?.data?.message ||
+                          error.response?.data?.error?.message ||
+                          'Failed to upload profile picture';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 

@@ -1,51 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import {
-  CreditCardIcon,
-  CalendarDaysIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
-  ArrowPathIcon,
-  DocumentArrowDownIcon,
-  StarIcon,
-  ClockIcon
+  ClockIcon,
+  InformationCircleIcon,
+  BuildingOfficeIcon,
+  EnvelopeIcon,
+  PhoneIcon
 } from '@heroicons/react/24/outline';
-import { toast } from 'react-hot-toast';
+import subscriptionService from '../../services/subscriptionService';
+import messService from '../../services/messService';
+import { useAuth } from '../../contexts/AuthContext';
 
 const Subscription = () => {
+  const { user } = useAuth();
   const [currentSubscription, setCurrentSubscription] = useState(null);
   const [subscriptionHistory, setSubscriptionHistory] = useState([]);
-  const [availablePlans, setAvailablePlans] = useState([]);
+  const [messInfo, setMessInfo] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showRenewalModal, setShowRenewalModal] = useState(false);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState(null);
-  const [processing, setProcessing] = useState(false);
-
-  const planFeatures = {
-    basic: [
-      'Access to all three meals',
-      'Standard menu options',
-      'QR-based attendance',
-      'Monthly billing',
-      'Email support'
-    ],
-    premium: [
-      'All Basic features',
-      'Special weekend menu',
-      'Priority meal booking',
-      'Guest meal allowance (2/month)',
-      'Quarterly billing discount',
-      'Priority support'
-    ],
-    vip: [
-      'All Premium features',
-      'Customized meal options',
-      'Unlimited guest meals',
-      'Room delivery option',
-      'Half-yearly billing discount',
-      '24/7 dedicated support'
-    ]
-  };
 
   useEffect(() => {
     fetchSubscriptionData();
@@ -54,76 +26,62 @@ const Subscription = () => {
   const fetchSubscriptionData = async () => {
     setLoading(true);
     try {
-      // Simulated API call - replace with actual service
-      // const [currentRes, historyRes, plansRes] = await Promise.all([
-      //   subscriptionService.getActiveSubscription(),
-      //   subscriptionService.getSubscriptionHistory(),
-      //   subscriptionService.getAvailablePlans()
-      // ]);
-      
-      // Mock data for development
-      const mockCurrentSubscription = {
-        subscription_id: 'SUB001',
-        plan_type: 'Premium',
-        plan_tier: 2,
-        start_date: '2024-08-01',
-        end_date: '2024-10-31',
-        total_amount: 4500,
-        status: 'active'
-      };
+      // Fetch real data from API
+      const messId = user?.mess_id?._id || user?.mess_id;
+      const [activeRes, historyRes, messRes] = await Promise.all([
+        subscriptionService.getActiveSubscription(),
+        subscriptionService.getMySubscriptions(),
+        messId ? messService.getMessById(messId).catch(() => null) : Promise.resolve(null)
+      ]);
 
-      const mockHistory = [
-        {
-          subscription_id: 'SUB001',
-          plan_type: 'Premium',
-          start_date: '2024-08-01',
-          end_date: '2024-10-31',
-          total_amount: 4500,
-          status: 'active'
-        },
-        {
-          subscription_id: 'SUB000',
-          plan_type: 'Basic',
-          start_date: '2024-05-01',
-          end_date: '2024-07-31',
-          total_amount: 3000,
-          status: 'expired'
-        }
-      ];
+      // Set mess info if available
+      if (messRes) {
+        const mess = messRes.data || messRes;
+        setMessInfo(mess);
+      }
 
-      const mockPlans = [
-        {
-          plan_id: 'basic',
-          name: 'Basic Plan',
-          price: 1500,
-          duration_months: 1,
-          tier: 1,
-          upgrade_price: null
-        },
-        {
-          plan_id: 'premium',
-          name: 'Premium Plan',
-          price: 4200,
-          duration_months: 3,
-          tier: 2,
-          upgrade_price: 1200
-        },
-        {
-          plan_id: 'vip',
-          name: 'VIP Plan',
-          price: 8000,
-          duration_months: 6,
-          tier: 3,
-          upgrade_price: 2000
-        }
-      ];
+      // Get active subscription (may be null if no active subscription)
+      const activeSubscription = activeRes.data?.subscription || activeRes.data || null;
 
-      setCurrentSubscription(mockCurrentSubscription);
-      setSubscriptionHistory(mockHistory);
-      setAvailablePlans(mockPlans);
+      // Get subscription history
+      const history = historyRes.data?.subscriptions || historyRes.data || [];
+
+      // Transform active subscription data if exists
+      // Handle both _id (raw mongoose) and subscription_id (toJSON transformed)
+      const subscriptionId = activeSubscription?.subscription_id || activeSubscription?._id;
+      if (activeSubscription && subscriptionId) {
+        setCurrentSubscription({
+          subscription_id: subscriptionId,
+          plan_type: activeSubscription.plan_name || activeSubscription.plan_type || 'Standard',
+          plan_tier: activeSubscription.plan_type === 'yearly' ? 3 : activeSubscription.plan_type === 'quarterly' ? 2 : 1,
+          start_date: activeSubscription.start_date,
+          end_date: activeSubscription.end_date,
+          total_amount: activeSubscription.amount,
+          status: activeSubscription.status,
+          sub_type: activeSubscription.sub_type,
+          meals_included: activeSubscription.meals_included,
+          payment_status: activeSubscription.payment_status
+        });
+      } else {
+        setCurrentSubscription(null);
+      }
+
+      // Transform history data - handle both _id and subscription_id
+      const transformedHistory = history.map(sub => ({
+        subscription_id: sub.subscription_id || sub._id,
+        plan_type: sub.plan_name || sub.plan_type || 'Standard',
+        start_date: sub.start_date,
+        end_date: sub.end_date,
+        total_amount: sub.amount,
+        status: sub.status
+      }));
+
+      setSubscriptionHistory(transformedHistory);
     } catch (error) {
-      toast.error('Failed to fetch subscription details');
       console.error('Subscription fetch error:', error);
+      // Set empty state on error - user has no subscription
+      setCurrentSubscription(null);
+      setSubscriptionHistory([]);
     } finally {
       setLoading(false);
     }
@@ -138,107 +96,12 @@ const Subscription = () => {
   };
 
   const getSubscriptionStatus = () => {
+    if (!currentSubscription) return { status: 'none', color: 'gray', bgColor: 'gray' };
     const daysRemaining = getDaysRemaining();
-    if (daysRemaining <= 0) return { status: 'expired', color: 'red', bgColor: 'red' };
+    if (currentSubscription.status === 'expired' || daysRemaining <= 0) return { status: 'expired', color: 'red', bgColor: 'red' };
+    if (currentSubscription.status === 'pending') return { status: 'pending', color: 'yellow', bgColor: 'yellow' };
     if (daysRemaining <= 7) return { status: 'expiring', color: 'yellow', bgColor: 'yellow' };
     return { status: 'active', color: 'green', bgColor: 'green' };
-  };
-
-  const handleRenewal = async () => {
-    if (!selectedPlan) {
-      toast.error('Please select a plan');
-      return;
-    }
-
-    setProcessing(true);
-    try {
-      // Simulated API call - replace with actual service
-      // await subscriptionService.renewSubscription(currentSubscription.subscription_id, {
-      //   plan_id: selectedPlan.plan_id,
-      //   duration_months: selectedPlan.duration_months
-      // });
-      
-      // Mock successful renewal
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API delay
-      
-      toast.success('Subscription renewed successfully!');
-      setShowRenewalModal(false);
-      fetchSubscriptionData();
-    } catch (error) {
-      toast.error('Failed to renew subscription');
-      console.error('Renewal error:', error);
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleUpgrade = async () => {
-    if (!selectedPlan) {
-      toast.error('Please select a plan');
-      return;
-    }
-
-    setProcessing(true);
-    try {
-      // Simulated API call - replace with actual service
-      // await subscriptionService.upgradeSubscription(currentSubscription.subscription_id, {
-      //   new_plan_id: selectedPlan.plan_id
-      // });
-      
-      // Mock successful upgrade
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API delay
-      
-      toast.success('Subscription upgraded successfully!');
-      setShowUpgradeModal(false);
-      fetchSubscriptionData();
-    } catch (error) {
-      toast.error('Failed to upgrade subscription');
-      console.error('Upgrade error:', error);
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleCancelSubscription = async () => {
-    if (window.confirm('Are you sure you want to cancel your subscription? This action cannot be undone.')) {
-      try {
-        // Simulated API call - replace with actual service
-        // await subscriptionService.cancelSubscription(currentSubscription.subscription_id);
-        
-        // Mock successful cancellation
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
-        
-        toast.success('Subscription cancelled successfully');
-        fetchSubscriptionData();
-      } catch (error) {
-        toast.error('Failed to cancel subscription');
-        console.error('Cancellation error:', error);
-      }
-    }
-  };
-
-  const downloadInvoice = async (subscriptionId) => {
-    try {
-      // Simulated API call - replace with actual service
-      // const response = await subscriptionService.downloadInvoice(subscriptionId);
-      
-      // Mock successful download
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
-      
-      // Create a mock download
-      const element = document.createElement('a');
-      element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(`Invoice for subscription ${subscriptionId}`));
-      element.setAttribute('download', `invoice-${subscriptionId}.txt`);
-      element.style.display = 'none';
-      document.body.appendChild(element);
-      element.click();
-      document.body.removeChild(element);
-      
-      toast.success('Invoice downloaded successfully');
-    } catch (error) {
-      toast.error('Failed to download invoice');
-      console.error('Download error:', error);
-    }
   };
 
   const formatDate = (dateString) => {
@@ -247,6 +110,15 @@ const Subscription = () => {
       month: 'long',
       day: 'numeric'
     });
+  };
+
+  const getMealTypeLabel = (subType) => {
+    switch (subType) {
+      case 'veg': return 'Vegetarian';
+      case 'non-veg': return 'Non-Vegetarian';
+      case 'both': return 'Veg & Non-Veg';
+      default: return subType || 'All';
+    }
   };
 
   const subscriptionStatus = getSubscriptionStatus();
@@ -265,25 +137,30 @@ const Subscription = () => {
       {/* Header */}
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">My Subscription</h1>
-        <p className="text-gray-600 dark:text-gray-400">Manage your mess subscription and billing</p>
+        <p className="text-gray-600 dark:text-gray-400">View your mess subscription details</p>
       </div>
 
       {/* Current Subscription */}
       {currentSubscription ? (
         <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border overflow-hidden">
-          <div className={`bg-gradient-to-r from-${subscriptionStatus.bgColor}-500 to-${subscriptionStatus.bgColor}-600 p-6 text-white`}>
+          <div className={`bg-gradient-to-r ${
+            subscriptionStatus.status === 'active' ? 'from-green-500 to-green-600' :
+            subscriptionStatus.status === 'expiring' ? 'from-yellow-500 to-yellow-600' :
+            subscriptionStatus.status === 'pending' ? 'from-yellow-500 to-yellow-600' :
+            'from-red-500 to-red-600'
+          } p-6 text-white`}>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-2xl font-bold mb-1">{currentSubscription.plan_type} Plan</h2>
+                <h2 className="text-2xl font-bold mb-1 capitalize">{currentSubscription.plan_type} Plan</h2>
                 <p className="text-white/90">Your current subscription plan</p>
               </div>
-              <div className={`px-4 py-2 bg-white/20 rounded-full flex items-center`}>
+              <div className="px-4 py-2 bg-white/20 rounded-full flex items-center">
                 <CheckCircleIcon className="w-5 h-5 mr-2" />
                 <span className="font-semibold capitalize">{subscriptionStatus.status}</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
               <div>
                 <p className="text-white/80 text-sm mb-1">Started On</p>
                 <p className="text-xl font-semibold">
@@ -302,95 +179,117 @@ const Subscription = () => {
                   {daysRemaining > 0 ? `${daysRemaining} days` : 'Expired'}
                 </p>
               </div>
+              <div>
+                <p className="text-white/80 text-sm mb-1">Food Preference</p>
+                <p className="text-xl font-semibold">
+                  {getMealTypeLabel(currentSubscription.sub_type)}
+                </p>
+              </div>
             </div>
           </div>
 
           <div className="p-6">
-            <div className="flex flex-wrap gap-3">
-              {daysRemaining <= 30 && (
-                <button
-                  onClick={() => setShowRenewalModal(true)}
-                  className="flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-                >
-                  <ArrowPathIcon className="w-4 h-4 mr-2" />
-                  Renew Subscription
-                </button>
-              )}
-              
-              {currentSubscription.plan_type !== 'VIP' && (
-                <button
-                  onClick={() => setShowUpgradeModal(true)}
-                  className="flex items-center px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
-                >
-                  <StarIcon className="w-4 h-4 mr-2" />
-                  Upgrade Plan
-                </button>
-              )}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Amount Paid</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">₹{currentSubscription.total_amount}</p>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Payment Status</p>
+                <p className={`text-lg font-semibold capitalize ${
+                  currentSubscription.payment_status === 'paid' ? 'text-green-600' : 'text-yellow-600'
+                }`}>
+                  {currentSubscription.payment_status || 'Paid'}
+                </p>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Meals Included</p>
+                <div className="flex gap-2 flex-wrap">
+                  {currentSubscription.meals_included?.breakfast && (
+                    <span className="px-2 py-1 bg-primary-100 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 text-xs rounded-full">Breakfast</span>
+                  )}
+                  {currentSubscription.meals_included?.lunch && (
+                    <span className="px-2 py-1 bg-primary-100 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 text-xs rounded-full">Lunch</span>
+                  )}
+                  {currentSubscription.meals_included?.dinner && (
+                    <span className="px-2 py-1 bg-primary-100 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 text-xs rounded-full">Dinner</span>
+                  )}
+                </div>
+              </div>
+            </div>
 
-              <button
-                onClick={() => downloadInvoice(currentSubscription.subscription_id)}
-                className="flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
-              >
-                <DocumentArrowDownIcon className="w-4 h-4 mr-2" />
-                Download Invoice
-              </button>
-
-              <button
-                onClick={handleCancelSubscription}
-                className="flex items-center px-4 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors ml-auto"
-              >
-                <ExclamationTriangleIcon className="w-4 h-4 mr-2" />
-                Cancel Subscription
-              </button>
+            {/* Info notice */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-start">
+                <InformationCircleIcon className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-3 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    To renew, upgrade, or make changes to your subscription, please contact the mess administrator.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       ) : (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-6">
-          <div className="flex items-center">
-            <ExclamationTriangleIcon className="w-6 h-6 text-yellow-600 dark:text-yellow-400 mr-3" />
+          <div className="flex items-start">
+            <ExclamationTriangleIcon className="w-6 h-6 text-yellow-600 dark:text-yellow-400 mr-3 flex-shrink-0" />
             <div>
               <h3 className="text-lg font-semibold text-yellow-900 dark:text-yellow-100">No Active Subscription</h3>
-              <p className="text-yellow-700 dark:text-yellow-300 mt-1">You don't have an active subscription. Please subscribe to continue using the mess services.</p>
+              <p className="text-yellow-700 dark:text-yellow-300 mt-1">
+                You don't have an active subscription. Please contact the mess administrator to subscribe to the mess services.
+              </p>
             </div>
           </div>
-          <button
-            onClick={() => setShowRenewalModal(true)}
-            className="mt-4 px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-          >
-            Subscribe Now
-          </button>
         </div>
       )}
 
-      {/* Plan Features */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {Object.entries(planFeatures).map(([planType, features]) => (
-          <div key={planType} className={`bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-6 ${
-            currentSubscription?.plan_type?.toLowerCase() === planType ? 'ring-2 ring-primary-500' : ''
-          }`}>
-            <div className="mb-4">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white capitalize flex items-center">
-                {planType} Plan
-                {planType === 'vip' && <StarIcon className="w-5 h-5 text-yellow-500 ml-2" />}
-              </h3>
-              {currentSubscription?.plan_type?.toLowerCase() === planType && (
-                <span className="inline-block px-2 py-1 bg-primary-100 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 text-xs font-semibold rounded-full mt-2">
-                  Current Plan
-                </span>
-              )}
-            </div>
-            <ul className="space-y-2">
-              {features.map((feature, index) => (
-                <li key={index} className="flex items-start">
-                  <CheckCircleIcon className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700 dark:text-gray-300 text-sm">{feature}</span>
-                </li>
-              ))}
-            </ul>
+      {/* Mess Contact Information */}
+      {messInfo && (
+        <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-6">
+          <div className="flex items-center mb-4">
+            <BuildingOfficeIcon className="w-6 h-6 text-primary-600 dark:text-primary-400 mr-2" />
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Mess Contact Information</h3>
           </div>
-        ))}
-      </div>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Contact your mess administrator for subscription inquiries, renewals, or any other assistance.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <div className="flex items-center mb-2">
+                <BuildingOfficeIcon className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Mess Name</p>
+              </div>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">{messInfo.name || 'N/A'}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <div className="flex items-center mb-2">
+                <EnvelopeIcon className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</p>
+              </div>
+              <a
+                href={`mailto:${messInfo.contact_email || ''}`}
+                className="text-lg font-semibold text-primary-600 dark:text-primary-400 hover:underline break-all"
+              >
+                {messInfo.contact_email || 'N/A'}
+              </a>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <div className="flex items-center mb-2">
+                <PhoneIcon className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</p>
+              </div>
+              <a
+                href={`tel:${messInfo.contact_phone || ''}`}
+                className="text-lg font-semibold text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                {messInfo.contact_phone || 'N/A'}
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Subscription History */}
       <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-6">
@@ -408,14 +307,13 @@ const Subscription = () => {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Duration</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-dark-border">
                 {subscriptionHistory.map((subscription) => (
                   <tr key={subscription.subscription_id}>
                     <td className="px-4 py-3">
-                      <span className="font-medium text-gray-900 dark:text-white">{subscription.plan_type}</span>
+                      <span className="font-medium text-gray-900 dark:text-white capitalize">{subscription.plan_type}</span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                       {formatDate(subscription.start_date)} - {formatDate(subscription.end_date)}
@@ -425,22 +323,16 @@ const Subscription = () => {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        subscription.status === 'active' 
+                        subscription.status === 'active'
                           ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
                           : subscription.status === 'expired'
                           ? 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+                          : subscription.status === 'pending'
+                          ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300'
                           : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
                       }`}>
                         {subscription.status}
                       </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => downloadInvoice(subscription.subscription_id)}
-                        className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
-                      >
-                        <DocumentArrowDownIcon className="w-4 h-4" />
-                      </button>
                     </td>
                   </tr>
                 ))}
@@ -451,120 +343,6 @@ const Subscription = () => {
           <p className="text-gray-500 dark:text-gray-400 text-center py-8">No subscription history available</p>
         )}
       </div>
-
-      {/* Renewal Modal */}
-      {showRenewalModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-dark-card rounded-xl shadow-xl p-6 w-full max-w-md">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Renew Subscription</h3>
-            
-            <div className="space-y-3 mb-6">
-              {availablePlans.map((plan) => (
-                <label
-                  key={plan.plan_id}
-                  className={`block p-4 border rounded-lg cursor-pointer transition-all ${
-                    selectedPlan?.plan_id === plan.plan_id
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="plan"
-                    value={plan.plan_id}
-                    onChange={() => setSelectedPlan(plan)}
-                    className="sr-only"
-                  />
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{plan.name}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{plan.duration_months} months</p>
-                    </div>
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">₹{plan.price}</p>
-                  </div>
-                </label>
-              ))}
-            </div>
-
-            <div className="flex space-x-3">
-              <button
-                onClick={() => {
-                  setShowRenewalModal(false);
-                  setSelectedPlan(null);
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleRenewal}
-                disabled={!selectedPlan || processing}
-                className="flex-1 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50"
-              >
-                {processing ? 'Processing...' : 'Confirm Renewal'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Upgrade Modal */}
-      {showUpgradeModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-dark-card rounded-xl shadow-xl p-6 w-full max-w-md">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Upgrade Plan</h3>
-            
-            <div className="space-y-3 mb-6">
-              {availablePlans
-                .filter(plan => plan.tier > currentSubscription?.plan_tier)
-                .map((plan) => (
-                  <label
-                    key={plan.plan_id}
-                    className={`block p-4 border rounded-lg cursor-pointer transition-all ${
-                      selectedPlan?.plan_id === plan.plan_id
-                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="plan"
-                      value={plan.plan_id}
-                      onChange={() => setSelectedPlan(plan)}
-                      className="sr-only"
-                    />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-white">{plan.name}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Upgrade benefits included</p>
-                      </div>
-                      <p className="text-lg font-bold text-gray-900 dark:text-white">₹{plan.upgrade_price}</p>
-                    </div>
-                  </label>
-                ))}
-            </div>
-
-            <div className="flex space-x-3">
-              <button
-                onClick={() => {
-                  setShowUpgradeModal(false);
-                  setSelectedPlan(null);
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpgrade}
-                disabled={!selectedPlan || processing}
-                className="flex-1 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors disabled:opacity-50"
-              >
-                {processing ? 'Processing...' : 'Confirm Upgrade'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

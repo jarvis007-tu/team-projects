@@ -5,12 +5,13 @@ const Subscription = require('../models/Subscription');
 const logger = require('../utils/logger');
 const { uploadToS3 } = require('../services/storageService');
 const csvParser = require('csv-parse/sync');
+const emailService = require('../utils/emailService');
 
 class UserController {
   // Get all users (Admin only)
   async getAllUsers(req, res) {
     try {
-      const { page = 1, limit = 10, search, role, status, mess_id } = req.query;
+      const { page = 1, limit = 10, search, role, status, subscription_status, mess_id } = req.query;
       const skip = (page - 1) * limit;
 
       const queryConditions = { deleted_at: null };
@@ -24,6 +25,8 @@ class UserController {
       } else {
         // Mess admin and subscribers can only see their own mess users
         queryConditions.mess_id = req.user.mess_id;
+        // Mess admins should never see super_admin users in their list
+        queryConditions.role = { $ne: 'super_admin' };
       }
 
       if (search) {
@@ -34,8 +37,77 @@ class UserController {
         ];
       }
 
-      if (role) queryConditions.role = role;
+      // Handle role filtering
+      if (role) {
+        // If mess_admin is requesting and trying to filter by role
+        if (req.user.role !== 'super_admin') {
+          // Mess admin can't see super_admin even if they try to filter by it
+          if (role === 'super_admin') {
+            // Return empty result - mess admin can't view super_admins
+            return res.json({
+              success: true,
+              data: {
+                users: [],
+                pagination: { total: 0, page: parseInt(page), pages: 0 }
+              }
+            });
+          }
+          queryConditions.role = role;
+        } else {
+          queryConditions.role = role;
+        }
+      }
       if (status) queryConditions.status = status;
+
+      // For subscription_status filter, we need to first get subscriber IDs with/without active subscriptions
+      let subscriberIdsToFilter = null;
+      if (subscription_status && (subscription_status === 'subscribed' || subscription_status === 'not_subscribed')) {
+        const today = new Date();
+        const messFilter = {};
+        if (req.user.role === 'super_admin' && mess_id) {
+          messFilter.mess_id = mess_id;
+        } else if (req.user.role !== 'super_admin') {
+          messFilter.mess_id = req.user.mess_id;
+        }
+
+        // Get all active subscriptions
+        const activeSubscriptions = await Subscription.find({
+          ...messFilter,
+          status: 'active',
+          payment_status: 'paid',
+          start_date: { $lte: today },
+          end_date: { $gte: today },
+          deleted_at: null
+        }).select('user_id');
+
+        const activeSubscriberIds = new Set(activeSubscriptions.map(s => s.user_id.toString()));
+
+        if (subscription_status === 'subscribed') {
+          // Only show users with active subscriptions (subscribers only)
+          subscriberIdsToFilter = Array.from(activeSubscriberIds);
+          if (subscriberIdsToFilter.length === 0) {
+            // No active subscribers, return empty
+            return res.json({
+              success: true,
+              data: {
+                users: [],
+                pagination: { total: 0, page: parseInt(page), pages: 0 }
+              }
+            });
+          }
+          queryConditions._id = { $in: subscriberIdsToFilter };
+          // Subscription status filter only applies to subscribers
+          if (!role) {
+            queryConditions.role = 'subscriber';
+          }
+        } else if (subscription_status === 'not_subscribed') {
+          // Only show subscribers without active subscriptions
+          queryConditions.role = 'subscriber';
+          if (activeSubscriberIds.size > 0) {
+            queryConditions._id = { $nin: Array.from(activeSubscriberIds) };
+          }
+        }
+      }
 
       const [users, count] = await Promise.all([
         User.find(queryConditions)
@@ -47,10 +119,38 @@ class UserController {
         User.countDocuments(queryConditions)
       ]);
 
+      // Get subscription status for each user (only for subscribers)
+      const today = new Date();
+      const userIds = users.filter(u => u.role === 'subscriber').map(u => u._id);
+
+      const activeSubscriptions = await Subscription.find({
+        user_id: { $in: userIds },
+        status: 'active',
+        payment_status: 'paid',
+        start_date: { $lte: today },
+        end_date: { $gte: today },
+        deleted_at: null
+      }).select('user_id');
+
+      const activeUserIds = new Set(activeSubscriptions.map(s => s.user_id.toString()));
+
+      // Add has_active_subscription flag to each user
+      const usersWithSubscriptionStatus = users.map(user => {
+        const userObj = user.toJSON();
+        // For subscribers, check if they have an active subscription
+        if (user.role === 'subscriber') {
+          userObj.has_active_subscription = activeUserIds.has(user._id.toString());
+        } else {
+          // Admins don't need subscription status
+          userObj.has_active_subscription = true;
+        }
+        return userObj;
+      });
+
       res.json({
         success: true,
         data: {
-          users,
+          users: usersWithSubscriptionStatus,
           pagination: {
             total: count,
             page: parseInt(page),
@@ -88,9 +188,10 @@ class UserController {
       }
 
       // Check if user has permission to view this user
+      const currentUserId = req.user.user_id || req.user._id || req.user.id;
       if (req.user.role !== 'super_admin' &&
           req.user.role !== 'mess_admin' &&
-          req.user.id !== id) {
+          currentUserId !== id) {
         return res.status(403).json({
           success: false,
           message: 'You do not have permission to view this user'
@@ -204,7 +305,7 @@ class UserController {
       const userResponse = user.toObject();
       delete userResponse.password;
 
-      logger.info(`User created: ${user._id} for mess ${mess.name} by admin ${req.user.id}`);
+      logger.info(`User created: ${user._id} for mess ${mess.name} by admin ${req.user.user_id || req.user._id || req.user.id}`);
 
       res.status(201).json({
         success: true,
@@ -294,7 +395,35 @@ class UserController {
         });
       }
 
+      // Mess boundary check - mess_admin can only delete users from their own mess
+      if (req.user.role === 'mess_admin' &&
+          user.mess_id.toString() !== req.user.mess_id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only delete users from your own mess'
+        });
+      }
+
+      // Store user info before deletion for email
+      const userEmail = user.email;
+      const userName = user.full_name;
+
       await user.softDelete(); // Soft delete using plugin
+
+      logger.info(`User ${user._id} deleted by ${req.user.role}: ${req.user.user_id}`);
+
+      // Send account deletion email notification (async, don't wait)
+      emailService.sendAccountDeletionEmail(userEmail, userName)
+        .then(result => {
+          if (result.success) {
+            logger.info(`Account deletion email sent to ${userEmail}`);
+          } else {
+            logger.warn(`Failed to send account deletion email to ${userEmail}: ${result.error}`);
+          }
+        })
+        .catch(err => {
+          logger.error(`Error sending account deletion email to ${userEmail}:`, err);
+        });
 
       res.json({
         success: true,
@@ -385,7 +514,7 @@ class UserController {
   // Update user profile
   async updateProfile(req, res) {
     try {
-      const userId = req.user.id;
+      const userId = req.user.user_id || req.user._id || req.user.id;
       const { full_name, phone } = req.body;
 
       const user = await User.findById(userId);
@@ -412,8 +541,10 @@ class UserController {
         }
       }
 
-      user.full_name = full_name;
-      user.phone = phone;
+      // Only update fields that are provided
+      if (full_name) user.full_name = full_name;
+      if (phone) user.phone = phone;
+
       await user.save();
 
       const userResponse = user.toObject();
@@ -436,7 +567,7 @@ class UserController {
   // Change password
   async changePassword(req, res) {
     try {
-      const userId = req.user.id;
+      const userId = req.user.user_id || req.user._id || req.user.id;
       const { currentPassword, newPassword } = req.body;
 
       const user = await User.findById(userId).select('+password');
@@ -478,7 +609,7 @@ class UserController {
   // Upload profile image
   async uploadProfileImage(req, res) {
     try {
-      const userId = req.user.id;
+      const userId = req.user.user_id || req.user._id || req.user.id;
 
       if (!req.file) {
         return res.status(400).json({

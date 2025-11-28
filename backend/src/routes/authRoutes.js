@@ -18,5 +18,7 @@ router.get('/profile', authenticate, authController.getProfile);
 router.put('/profile', authenticate, authController.updateProfile);
 router.post('/change-password', authenticate, authController.changePassword);
 router.post('/update-device', authenticate, authController.updateDeviceId);
+router.post('/profile-image', authenticate, authController.uploadProfileImage);
+router.delete('/profile-image', authenticate, authController.removeProfileImage);
 
 module.exports = router;

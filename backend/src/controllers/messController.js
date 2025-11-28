@@ -52,7 +52,6 @@ class MessController {
     try {
       const {
         name,
-        code,
         address,
         city,
         state,
@@ -68,19 +67,35 @@ class MessController {
         image_url
       } = req.body;
 
-      // Check if mess code already exists
-      const existingMess = await Mess.findOne({ code: code.toUpperCase() });
-      if (existingMess) {
-        return res.status(400).json({
-          success: false,
-          message: 'Mess code already exists'
-        });
-      }
+      // Auto-generate unique mess code from name
+      const generateMessCode = async (messName) => {
+        // Extract first letters of words (max 4) and convert to uppercase
+        const words = messName.trim().split(/\s+/);
+        const prefix = words
+          .slice(0, Math.min(4, words.length))
+          .map(word => word.charAt(0))
+          .join('')
+          .toUpperCase();
+
+        // Find existing codes with same prefix to generate unique suffix
+        const existingCodes = await Mess.find({
+          code: new RegExp(`^${prefix}-`, 'i')
+        }).select('code');
+
+        const maxSuffix = existingCodes.reduce((max, mess) => {
+          const match = mess.code.match(/-(\d+)$/);
+          return match ? Math.max(max, parseInt(match[1])) : max;
+        }, 0);
+
+        return `${prefix}-${String(maxSuffix + 1).padStart(3, '0')}`;
+      };
+
+      const generatedCode = await generateMessCode(name);
 
       // Create new mess
       const mess = await Mess.create({
         name,
-        code: code.toUpperCase(),
+        code: generatedCode,
         address,
         city,
         state,
@@ -128,6 +143,19 @@ class MessController {
       // Build filter
       const filter = { deleted_at: null };
 
+      // Mess boundary check for mess_admin and subscriber
+      // - super_admin: sees ALL messes
+      // - mess_admin & subscriber: see only their assigned mess
+      if (req.user.role !== 'super_admin') {
+        if (!req.user.mess_id) {
+          return res.status(403).json({
+            success: false,
+            message: 'No mess assigned to your account'
+          });
+        }
+        filter._id = req.user.mess_id;
+      }
+
       if (status) {
         filter.status = status;
       }
@@ -156,6 +184,8 @@ class MessController {
         .sort({ created_at: -1 })
         .skip(parseInt(offset))
         .limit(parseInt(limit));
+
+      logger.debug(`Messes fetched by ${req.user.role}: ${messes.length} results`);
 
       res.json({
         success: true,
@@ -190,6 +220,18 @@ class MessController {
           success: false,
           message: 'Mess not found'
         });
+      }
+
+      // Mess boundary check for mess_admin and subscriber
+      // - super_admin: can view any mess
+      // - mess_admin & subscriber: can only view their assigned mess
+      if (req.user.role !== 'super_admin') {
+        if (!req.user.mess_id || req.user.mess_id.toString() !== mess_id) {
+          return res.status(403).json({
+            success: false,
+            message: 'You do not have permission to view this mess'
+          });
+        }
       }
 
       // Get user count

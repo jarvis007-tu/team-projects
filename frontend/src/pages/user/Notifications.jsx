@@ -27,11 +27,20 @@ const Notifications = () => {
   const fetchNotifications = async () => {
     setLoading(true);
     try {
-      const response = await notificationService.getMyNotifications({
-        filter: filter !== 'all' ? filter : undefined
-      });
-      setNotifications(response.data.notifications);
-      setUnreadCount(response.data.unread_count);
+      // Build params based on filter type
+      const params = {};
+
+      if (filter === 'unread') {
+        params.is_read = 'false';
+      } else if (filter !== 'all') {
+        // Filter by notification type (announcement, info, warning)
+        params.type = filter;
+      }
+
+      const response = await notificationService.getMyNotifications(params);
+      const data = response.data || response;
+      setNotifications(data.notifications || []);
+      setUnreadCount(data.unreadCount || data.unread_count || 0);
     } catch (error) {
       toast.error('Failed to fetch notifications');
     } finally {

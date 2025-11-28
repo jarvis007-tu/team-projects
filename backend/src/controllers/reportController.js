@@ -176,9 +176,21 @@ class ReportController {
   // Generate attendance report
   async generateAttendanceReport(req, res) {
     try {
-      const { start_date, end_date, format = 'json', meal_type, user_id } = req.query;
+      const { start_date, end_date, format = 'json', meal_type, user_id, mess_id } = req.query;
 
-      const whereConditions = {};
+      // Build mess filter based on user role
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
+
+      const whereConditions = { ...messFilter };
       if (start_date && end_date) {
         whereConditions.scan_date = {
           $gte: moment(start_date).startOf('day').toDate(),
@@ -253,9 +265,21 @@ class ReportController {
   // Generate subscription report
   async generateSubscriptionReport(req, res) {
     try {
-      const { status, plan_type, format = 'json' } = req.query;
+      const { status, plan_type, format = 'json', mess_id } = req.query;
 
-      const whereConditions = {};
+      // Build mess filter based on user role
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
+
+      const whereConditions = { ...messFilter };
       if (status) whereConditions.status = status;
       if (plan_type) whereConditions.plan_type = plan_type;
 
@@ -321,9 +345,22 @@ class ReportController {
   // Generate revenue report
   async generateRevenueReport(req, res) {
     try {
-      const { start_date, end_date, group_by = 'month' } = req.query;
+      const { start_date, end_date, group_by = 'month', mess_id } = req.query;
+
+      // Build mess filter based on user role
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
 
       const matchConditions = {
+        ...messFilter,
         payment_status: 'paid'
       };
 
@@ -438,7 +475,7 @@ class ReportController {
   // Generate user activity report
   async generateUserActivityReport(req, res) {
     try {
-      const { user_id, start_date, end_date } = req.query;
+      const { user_id, start_date, end_date, mess_id } = req.query;
 
       if (!user_id) {
         return res.status(400).json({
@@ -447,8 +484,20 @@ class ReportController {
         });
       }
 
+      // Build mess filter based on user role
+      const messFilter = {};
+      if (req.user.role === 'super_admin') {
+        // Super admin can view all or filter by specific mess
+        if (mess_id) {
+          messFilter.mess_id = mess_id;
+        }
+      } else {
+        // Mess admin can only view their own mess
+        messFilter.mess_id = req.user.mess_id;
+      }
+
       // Get user details
-      const user = await User.findById(user_id).select('-password').lean();
+      const user = await User.findOne({ _id: user_id, ...messFilter }).select('-password').lean();
 
       if (!user) {
         return res.status(404).json({
@@ -466,14 +515,15 @@ class ReportController {
       }
 
       // Get subscriptions
-      const subscriptions = await Subscription.find({ user_id })
+      const subscriptions = await Subscription.find({ user_id, ...messFilter })
         .sort({ createdAt: -1 })
         .lean();
 
       // Get attendance
       const attendance = await Attendance.find({
         user_id,
-        ...dateConditions
+        ...dateConditions,
+        ...messFilter
       })
         .sort({ scan_date: -1, scan_time: -1 })
         .lean();
@@ -485,7 +535,8 @@ class ReportController {
 
       const confirmations = await MealConfirmation.find({
         user_id,
-        meal_date: confirmationDateFilter
+        meal_date: confirmationDateFilter,
+        ...messFilter
       })
         .sort({ meal_date: -1 })
         .lean();

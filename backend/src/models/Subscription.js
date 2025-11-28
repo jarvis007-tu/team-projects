@@ -47,13 +47,8 @@ const SubscriptionSchema = new mongoose.Schema({
   },
   end_date: {
     type: Date,
-    required: [true, 'End date is required'],
-    validate: {
-      validator: function(value) {
-        return value > this.start_date;
-      },
-      message: 'End date must be after start date'
-    }
+    required: [true, 'End date is required']
+    // Note: Date validation is done in pre-save hook to handle both create and update
   },
   status: {
     type: String,
@@ -128,6 +123,51 @@ SubscriptionSchema.pre('save', function(next) {
   try {
     this.validateDates();
     this.updateStatus();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Pre-update validation for findOneAndUpdate, findByIdAndUpdate, updateOne, updateMany
+SubscriptionSchema.pre(['findOneAndUpdate', 'updateOne', 'updateMany'], async function(next) {
+  try {
+    const update = this.getUpdate();
+
+    // If both start_date and end_date are being updated, validate them
+    if (update.start_date && update.end_date) {
+      const startDate = moment(update.start_date).startOf('day');
+      const endDate = moment(update.end_date).startOf('day');
+
+      if (endDate.isSameOrBefore(startDate)) {
+        throw new Error('End date must be after start date');
+      }
+    }
+    // If only end_date is being updated, fetch the document to compare with existing start_date
+    else if (update.end_date && !update.start_date) {
+      const docToUpdate = await this.model.findOne(this.getQuery());
+      if (docToUpdate) {
+        const startDate = moment(docToUpdate.start_date).startOf('day');
+        const endDate = moment(update.end_date).startOf('day');
+
+        if (endDate.isSameOrBefore(startDate)) {
+          throw new Error('End date must be after start date');
+        }
+      }
+    }
+    // If only start_date is being updated, fetch the document to compare with existing end_date
+    else if (update.start_date && !update.end_date) {
+      const docToUpdate = await this.model.findOne(this.getQuery());
+      if (docToUpdate) {
+        const startDate = moment(update.start_date).startOf('day');
+        const endDate = moment(docToUpdate.end_date).startOf('day');
+
+        if (endDate.isSameOrBefore(startDate)) {
+          throw new Error('End date must be after start date');
+        }
+      }
+    }
+
     next();
   } catch (error) {
     next(error);
@@ -227,9 +267,35 @@ SubscriptionSchema.methods.toJSON = function() {
     delete subscriptionObject.updatedAt;
   }
 
-  // Convert user_id ObjectId to string for frontend
+  // Handle user_id - check if populated (object) or just ObjectId
   if (subscriptionObject.user_id) {
-    subscriptionObject.user_id = subscriptionObject.user_id.toString();
+    if (typeof subscriptionObject.user_id === 'object' && subscriptionObject.user_id._id) {
+      // user_id is populated - transform the nested user object
+      const user = subscriptionObject.user_id;
+      subscriptionObject.user_id = {
+        _id: user._id,
+        user_id: user._id,
+        full_name: user.full_name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status
+      };
+    } else if (subscriptionObject.user_id._bsontype === 'ObjectId' || typeof subscriptionObject.user_id === 'string') {
+      // user_id is not populated - convert ObjectId to string
+      subscriptionObject.user_id = subscriptionObject.user_id.toString();
+    }
+  }
+
+  // Handle mess_id - check if populated (object) or just ObjectId
+  if (subscriptionObject.mess_id) {
+    if (typeof subscriptionObject.mess_id === 'object' && subscriptionObject.mess_id._id) {
+      // mess_id is populated - keep the nested object as is
+      // It already has proper structure from Mess model
+    } else if (subscriptionObject.mess_id._bsontype === 'ObjectId' || typeof subscriptionObject.mess_id === 'string') {
+      // mess_id is not populated - convert ObjectId to string
+      subscriptionObject.mess_id = subscriptionObject.mess_id.toString();
+    }
   }
 
   return subscriptionObject;

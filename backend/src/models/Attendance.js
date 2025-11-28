@@ -267,12 +267,25 @@ AttendanceSchema.methods.toJSON = function() {
     delete attendanceObject.updatedAt;
   }
 
-  // Convert ObjectId references to strings
+  // Convert ObjectId references to strings ONLY if they are not populated (not objects)
   if (attendanceObject.user_id) {
-    attendanceObject.user_id = attendanceObject.user_id.toString();
+    // If user_id is populated (an object with user data), keep it as is
+    if (typeof attendanceObject.user_id === 'object' && attendanceObject.user_id._id) {
+      // Keep the populated user object but convert its _id to user_id
+      if (attendanceObject.user_id._id) {
+        attendanceObject.user_id.user_id = attendanceObject.user_id._id;
+        delete attendanceObject.user_id._id;
+      }
+    } else {
+      // If not populated, convert ObjectId to string
+      attendanceObject.user_id = attendanceObject.user_id.toString();
+    }
   }
   if (attendanceObject.subscription_id) {
     attendanceObject.subscription_id = attendanceObject.subscription_id.toString();
+  }
+  if (attendanceObject.mess_id) {
+    attendanceObject.mess_id = attendanceObject.mess_id.toString();
   }
 
   return attendanceObject;

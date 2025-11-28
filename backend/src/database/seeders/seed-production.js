@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { connectDB, disconnectDB } = require('../../config/mongodb');
-const { Mess, User } = require('../../models');
+const { Mess, User, MenuCategory } = require('../../models');
 const logger = require('../../utils/logger');
 
 async function seedProduction() {
@@ -43,9 +43,20 @@ async function seedProduction() {
         description: 'Default production mess'
       });
       logger.info('Default mess created successfully!');
+
+      // Initialize default menu categories for the new mess
+      await MenuCategory.initializeDefaults(defaultMess._id, defaultMess._id);
+      logger.info('Default menu categories created for the mess');
     } else {
       defaultMess = existingMess;
       logger.info('Using existing mess for admin user');
+
+      // Check if categories exist, if not create them
+      const categoriesExist = await MenuCategory.countDocuments({ mess_id: defaultMess._id });
+      if (categoriesExist === 0) {
+        await MenuCategory.initializeDefaults(defaultMess._id, defaultMess._id);
+        logger.info('Default menu categories created for existing mess');
+      }
     }
 
     // Check if super admin already exists

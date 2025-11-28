@@ -296,13 +296,23 @@ class AttendanceController {
       const filter = { scan_date: today };
       if (meal_type) filter.meal_type = meal_type;
 
+      // Mess boundary check for mess_admin
+      if (req.user.role === 'mess_admin') {
+        filter.mess_id = req.user.mess_id;
+      }
+
       const attendance = await Attendance.find(filter)
         .populate('user_id', 'user_id full_name email phone')
         .sort({ scan_time: -1 });
 
       // Get meal-wise count
+      const matchFilter = { scan_date: today };
+      if (req.user.role === 'mess_admin') {
+        matchFilter.mess_id = req.user.mess_id;
+      }
+
       const mealCounts = await Attendance.aggregate([
-        { $match: { scan_date: today } },
+        { $match: matchFilter },
         {
           $group: {
             _id: '$meal_type',
@@ -574,11 +584,17 @@ class AttendanceController {
 
       const filter = {};
 
+      // Add mess filtering based on user role
+      if (req.messContext?.mess_id) {
+        filter.mess_id = req.messContext.mess_id;
+      }
+
       if (date) {
+        // Filter by scan_date - use date range for the entire day
         const targetDate = moment(date);
-        filter.scan_time = {
-          $gte: targetDate.startOf('day').toDate(),
-          $lte: targetDate.endOf('day').toDate()
+        filter.scan_date = {
+          $gte: targetDate.clone().startOf('day').toDate(),
+          $lte: targetDate.clone().endOf('day').toDate()
         };
       }
 
@@ -619,9 +635,9 @@ class AttendanceController {
       const targetDate = moment(date);
 
       const attendance = await Attendance.find({
-        scan_time: {
-          $gte: targetDate.startOf('day').toDate(),
-          $lte: targetDate.endOf('day').toDate()
+        scan_date: {
+          $gte: targetDate.clone().startOf('day').toDate(),
+          $lte: targetDate.clone().endOf('day').toDate()
         }
       })
         .populate('user_id', 'user_id full_name email phone')
@@ -636,7 +652,7 @@ class AttendanceController {
       res.json({
         success: true,
         data: {
-          date: targetDate.format('YYYY-MM-DD'),
+          date: moment(date).format('YYYY-MM-DD'),
           attendance,
           summary: {
             breakfast: summary.breakfast.length,
@@ -769,19 +785,29 @@ class AttendanceController {
   // Get attendance analytics
   async getAttendanceAnalytics(req, res) {
     try {
-      const { start_date, end_date, group_by = 'day' } = req.query;
+      const { start_date, end_date, date, group_by = 'day' } = req.query;
 
-      const startDate = start_date ? moment(start_date) : moment().subtract(30, 'days');
-      const endDate = end_date ? moment(end_date) : moment();
+      // If date parameter is provided, use it for today's stats
+      const targetDate = date ? moment(date) : moment();
+      const startDate = start_date ? moment(start_date) : targetDate.clone().startOf('day');
+      const endDate = end_date ? moment(end_date) : targetDate.clone().endOf('day');
+
+      // Build match filter with mess context
+      const matchFilter = {
+        scan_time: {
+          $gte: startDate.toDate(),
+          $lte: endDate.toDate()
+        }
+      };
+
+      // Add mess filtering
+      if (req.messContext?.mess_id) {
+        matchFilter.mess_id = req.messContext.mess_id;
+      }
 
       const attendance = await Attendance.aggregate([
         {
-          $match: {
-            scan_time: {
-              $gte: startDate.toDate(),
-              $lte: endDate.toDate()
-            }
-          }
+          $match: matchFilter
         },
         {
           $group: {
@@ -797,14 +823,15 @@ class AttendanceController {
         }
       ]);
 
-      // Calculate averages
-      const totalDays = endDate.diff(startDate, 'days') + 1;
+      // Calculate totals for today
       const mealCounts = { breakfast: 0, lunch: 0, dinner: 0 };
+      let totalPresent = 0;
 
       const formattedAttendance = attendance.map(record => {
         const mealType = record._id.meal_type;
         const count = record.count;
         mealCounts[mealType] = (mealCounts[mealType] || 0) + count;
+        totalPresent += count;
 
         return {
           meal_type: mealType,
@@ -813,18 +840,35 @@ class AttendanceController {
         };
       });
 
+      // Get total active users/subscribers for the mess to calculate attendance rate
+      const User = require('../models/User');
+      const userFilter = { status: 'active', role: 'subscriber' };
+      if (req.messContext?.mess_id) {
+        userFilter.mess_id = req.messContext.mess_id;
+      }
+      const totalActiveUsers = await User.countDocuments(userFilter);
+
+      // Calculate attendance rate (present / total active users * 100)
+      const attendanceRate = totalActiveUsers > 0
+        ? ((totalPresent / totalActiveUsers) * 100).toFixed(1)
+        : 0;
+
+      // For now, absent and late are not tracked in the model, so they're 0
       const analytics = {
+        totalPresent: totalPresent,
+        totalAbsent: 0, // Not tracked in current model
+        attendanceRate: parseFloat(attendanceRate),
+        lateArrivals: 0, // Not tracked in current model
+        presentChange: '+0%', // Can be calculated if needed
+        absentChange: '+0%',
+        rateChange: '+0%',
+        lateChange: '+0%',
         period: {
           start: startDate.format('YYYY-MM-DD'),
           end: endDate.format('YYYY-MM-DD'),
-          days: totalDays
+          days: endDate.diff(startDate, 'days') + 1
         },
         totals: mealCounts,
-        averages: {
-          breakfast: (mealCounts.breakfast / totalDays).toFixed(2),
-          lunch: (mealCounts.lunch / totalDays).toFixed(2),
-          dinner: (mealCounts.dinner / totalDays).toFixed(2)
-        },
         daily: formattedAttendance
       };
 
@@ -896,14 +940,22 @@ class AttendanceController {
       const startDate = start_date ? moment(start_date) : moment().startOf('month');
       const endDate = end_date ? moment(end_date) : moment().endOf('month');
 
+      // Build match filter with mess context
+      const matchFilter = {
+        scan_time: {
+          $gte: startDate.toDate(),
+          $lte: endDate.toDate()
+        }
+      };
+
+      // Add mess filtering
+      if (req.messContext?.mess_id) {
+        matchFilter.mess_id = req.messContext.mess_id;
+      }
+
       const attendance = await Attendance.aggregate([
         {
-          $match: {
-            scan_time: {
-              $gte: startDate.toDate(),
-              $lte: endDate.toDate()
-            }
-          }
+          $match: matchFilter
         },
         {
           $group: {
@@ -976,13 +1028,21 @@ class AttendanceController {
           groupInterval = 'day';
       }
 
+      // Build match filter with mess context
+      const matchFilter = {
+        scan_time: {
+          $gte: startDate.toDate()
+        }
+      };
+
+      // Add mess filtering
+      if (req.messContext?.mess_id) {
+        matchFilter.mess_id = req.messContext.mess_id;
+      }
+
       const attendance = await Attendance.aggregate([
         {
-          $match: {
-            scan_time: {
-              $gte: startDate.toDate()
-            }
-          }
+          $match: matchFilter
         },
         {
           $group: {
@@ -1013,6 +1073,233 @@ class AttendanceController {
       res.status(500).json({
         success: false,
         message: 'Failed to fetch attendance trends'
+      });
+    }
+  }
+
+  // Get meal prediction statistics (day-wise attendance ratio)
+  async getMealPrediction(req, res) {
+    try {
+      const { weeks = 4 } = req.query;
+      const weeksToAnalyze = parseInt(weeks) || 4;
+
+      // Build match filter with mess context
+      const matchFilter = {};
+      if (req.messContext?.mess_id) {
+        matchFilter.mess_id = req.messContext.mess_id;
+      } else if (req.user.role === 'mess_admin') {
+        matchFilter.mess_id = req.user.mess_id;
+      }
+
+      // Get attendance data for the specified number of weeks
+      const startDate = moment().subtract(weeksToAnalyze, 'weeks').startOf('day');
+      matchFilter.scan_time = { $gte: startDate.toDate() };
+
+      // Get unique active subscribers count for the mess (count unique users, not subscriptions)
+      const subscriberFilter = {
+        status: 'active',
+        start_date: { $lte: new Date() },
+        end_date: { $gte: new Date() }
+      };
+      if (matchFilter.mess_id) {
+        subscriberFilter.mess_id = matchFilter.mess_id;
+      }
+
+      // Count unique users with active subscriptions (not subscription count)
+      const uniqueSubscribers = await Subscription.distinct('user_id', subscriberFilter);
+      const activeSubscribersCount = uniqueSubscribers.length;
+
+      // Get meal-wise subscriber count (users subscribed for each meal type)
+      const mealWiseSubscribers = await Subscription.aggregate([
+        { $match: subscriberFilter },
+        {
+          $group: {
+            _id: '$user_id',
+            meals_included: { $first: '$meals_included' }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            breakfastCount: {
+              $sum: { $cond: [{ $ifNull: ['$meals_included.breakfast', true] }, 1, 0] }
+            },
+            lunchCount: {
+              $sum: { $cond: [{ $ifNull: ['$meals_included.lunch', true] }, 1, 0] }
+            },
+            dinnerCount: {
+              $sum: { $cond: [{ $ifNull: ['$meals_included.dinner', true] }, 1, 0] }
+            }
+          }
+        }
+      ]);
+
+      const mealSubscriberCounts = mealWiseSubscribers[0] || {
+        breakfastCount: activeSubscribersCount,
+        lunchCount: activeSubscribersCount,
+        dinnerCount: activeSubscribersCount
+      };
+
+      // Aggregate attendance by day of week and meal type
+      const attendanceByDayOfWeek = await Attendance.aggregate([
+        { $match: matchFilter },
+        {
+          $project: {
+            dayOfWeek: { $dayOfWeek: '$scan_time' }, // 1 = Sunday, 2 = Monday, etc.
+            meal_type: 1,
+            scan_date: { $dateToString: { format: '%Y-%m-%d', date: '$scan_time' } }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              dayOfWeek: '$dayOfWeek',
+              meal_type: '$meal_type',
+              date: '$scan_date'
+            },
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              dayOfWeek: '$_id.dayOfWeek',
+              meal_type: '$_id.meal_type'
+            },
+            totalAttendance: { $sum: '$count' },
+            daysCount: { $sum: 1 },
+            avgAttendance: { $avg: '$count' },
+            minAttendance: { $min: '$count' },
+            maxAttendance: { $max: '$count' }
+          }
+        },
+        { $sort: { '_id.dayOfWeek': 1, '_id.meal_type': 1 } }
+      ]);
+
+      // Map day numbers to day names
+      const dayNames = ['', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const mealOrder = { breakfast: 1, lunch: 2, dinner: 3 };
+
+      // Format the prediction data
+      const predictionByDay = {};
+      const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+      // Initialize all days with empty data
+      daysOfWeek.forEach(day => {
+        predictionByDay[day] = {
+          breakfast: { predicted: 0, ratio: 0, avgAttendance: 0, minAttendance: 0, maxAttendance: 0 },
+          lunch: { predicted: 0, ratio: 0, avgAttendance: 0, minAttendance: 0, maxAttendance: 0 },
+          dinner: { predicted: 0, ratio: 0, avgAttendance: 0, minAttendance: 0, maxAttendance: 0 },
+          total: { predicted: 0, ratio: 0 }
+        };
+      });
+
+      // Fill in actual data with meal-specific subscriber counts for accurate ratio
+      attendanceByDayOfWeek.forEach(record => {
+        const dayName = dayNames[record._id.dayOfWeek];
+        const mealType = record._id.meal_type;
+
+        if (predictionByDay[dayName] && mealType) {
+          const avgAttendance = Math.round(record.avgAttendance);
+
+          // Use meal-specific subscriber count for accurate ratio
+          let mealSubscriberCount = activeSubscribersCount;
+          if (mealType === 'breakfast') {
+            mealSubscriberCount = mealSubscriberCounts.breakfastCount || activeSubscribersCount;
+          } else if (mealType === 'lunch') {
+            mealSubscriberCount = mealSubscriberCounts.lunchCount || activeSubscribersCount;
+          } else if (mealType === 'dinner') {
+            mealSubscriberCount = mealSubscriberCounts.dinnerCount || activeSubscribersCount;
+          }
+
+          const ratio = mealSubscriberCount > 0
+            ? Math.round((avgAttendance / mealSubscriberCount) * 100)
+            : 0;
+
+          predictionByDay[dayName][mealType] = {
+            predicted: avgAttendance,
+            ratio: ratio,
+            avgAttendance: avgAttendance,
+            minAttendance: record.minAttendance,
+            maxAttendance: record.maxAttendance,
+            samplesCount: record.daysCount,
+            subscriberCount: mealSubscriberCount
+          };
+        }
+      });
+
+      // Calculate daily totals
+      const totalMealSubscribers = mealSubscriberCounts.breakfastCount + mealSubscriberCounts.lunchCount + mealSubscriberCounts.dinnerCount;
+      Object.keys(predictionByDay).forEach(day => {
+        const dayData = predictionByDay[day];
+        const totalPredicted = dayData.breakfast.predicted + dayData.lunch.predicted + dayData.dinner.predicted;
+        dayData.total = {
+          predicted: totalPredicted,
+          ratio: totalMealSubscribers > 0 ? Math.round((totalPredicted / totalMealSubscribers) * 100) : 0
+        };
+      });
+
+      // Get today's day name for highlighting
+      const todayDayName = moment().format('dddd');
+
+      // Get next 7 days prediction
+      const next7Days = [];
+      for (let i = 0; i < 7; i++) {
+        const date = moment().add(i, 'days');
+        const dayName = date.format('dddd');
+        const dayData = predictionByDay[dayName];
+
+        next7Days.push({
+          date: date.format('YYYY-MM-DD'),
+          dayName: dayName,
+          isToday: i === 0,
+          prediction: {
+            breakfast: dayData.breakfast.predicted,
+            lunch: dayData.lunch.predicted,
+            dinner: dayData.dinner.predicted,
+            total: dayData.total.predicted
+          },
+          ratio: {
+            breakfast: dayData.breakfast.ratio,
+            lunch: dayData.lunch.ratio,
+            dinner: dayData.dinner.ratio,
+            total: dayData.total.ratio
+          }
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          totalSubscribers: activeSubscribersCount,
+          mealWiseSubscribers: {
+            breakfast: mealSubscriberCounts.breakfastCount,
+            lunch: mealSubscriberCounts.lunchCount,
+            dinner: mealSubscriberCounts.dinnerCount
+          },
+          weeksAnalyzed: weeksToAnalyze,
+          analysisStartDate: startDate.format('YYYY-MM-DD'),
+          todayDayName,
+          predictionByDay,
+          next7Days,
+          summary: {
+            averageAttendanceRate: Object.values(predictionByDay).reduce((acc, day) => acc + day.total.ratio, 0) / 7,
+            highestAttendanceDay: Object.entries(predictionByDay).reduce((max, [day, data]) =>
+              data.total.ratio > max.ratio ? { day, ratio: data.total.ratio } : max,
+              { day: '', ratio: 0 }
+            ),
+            lowestAttendanceDay: Object.entries(predictionByDay).reduce((min, [day, data]) =>
+              (min.day === '' || data.total.ratio < min.ratio) ? { day, ratio: data.total.ratio } : min,
+              { day: '', ratio: 100 }
+            )
+          }
+        }
+      });
+    } catch (error) {
+      logger.error('Error fetching meal prediction:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch meal prediction statistics'
       });
     }
   }

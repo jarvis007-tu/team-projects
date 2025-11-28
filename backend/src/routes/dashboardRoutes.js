@@ -2,13 +2,18 @@ const express = require('express');
 const router = express.Router();
 const dashboardController = require('../controllers/dashboardController');
 const { authenticate, authorize } = require('../middleware/auth');
+const { extractMessContext } = require('../middleware/messContext');
 
-// All dashboard routes require authentication
+// All dashboard routes require authentication and mess context
 router.use(authenticate);
+router.use(extractMessContext);
 
 // General dashboard stats - available to all authenticated users
 router.get('/stats', dashboardController.getStats);
 router.get('/menu-today', dashboardController.getMenuToday);
+
+// User/Subscriber dashboard
+router.get('/user', dashboardController.getUserDashboard);
 
 // Admin-only dashboard routes
 router.get('/recent-activity', authorize('super_admin', 'mess_admin'), dashboardController.getRecentActivity);

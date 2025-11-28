@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   FiPlus, FiEdit2, FiTrash2, FiSearch, FiFilter,
   FiDownload, FiCalendar, FiUsers, FiCheckCircle,
-  FiClock, FiAlertCircle, FiBarChart2, FiX
+  FiClock, FiAlertCircle, FiBarChart2, FiX, FiTrendingUp
 } from 'react-icons/fi';
-import { MdQrCodeScanner, MdFastfood, MdTrendingUp } from 'react-icons/md';
+import { MdQrCodeScanner, MdFastfood, MdTrendingUp, MdRestaurant } from 'react-icons/md';
 import attendanceService from '../../services/attendanceService';
 import { toast } from 'react-hot-toast';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -23,6 +23,8 @@ const AdminAttendance = () => {
   const [analytics, setAnalytics] = useState({});
   const [attendanceTrends, setAttendanceTrends] = useState([]);
   const [mealWiseData, setMealWiseData] = useState([]);
+  const [mealPrediction, setMealPrediction] = useState(null);
+  const [predictionWeeks, setPredictionWeeks] = useState(4);
 
   const [manualAttendance, setManualAttendance] = useState({
     user_id: '',
@@ -43,7 +45,12 @@ const AdminAttendance = () => {
     fetchAnalytics();
     fetchAttendanceTrends();
     fetchMealWiseData();
+    fetchMealPrediction();
   }, [selectedDate, selectedMealType, selectedUser, searchTerm, currentPage]);
+
+  useEffect(() => {
+    fetchMealPrediction();
+  }, [predictionWeeks]);
 
   const fetchAttendanceRecords = async () => {
     setLoading(true);
@@ -55,10 +62,13 @@ const AdminAttendance = () => {
         search: searchTerm || undefined,
         page: currentPage
       });
-      setAttendanceRecords(response.data.attendance);
-      setTotalPages(response.data.pagination.pages);
+      // Handle both response structures
+      const data = response.data?.data || response.data;
+      setAttendanceRecords(data.records || data.attendance || []);
+      setTotalPages(data.pagination?.pages || 1);
     } catch (error) {
       toast.error('Failed to fetch attendance records');
+      console.error('Attendance fetch error:', error);
     } finally {
       setLoading(false);
     }
@@ -69,7 +79,8 @@ const AdminAttendance = () => {
       const response = await attendanceService.getAttendanceAnalytics({
         date: selectedDate
       });
-      setAnalytics(response.data);
+      const data = response.data?.data || response.data || {};
+      setAnalytics(data);
     } catch (error) {
       console.error('Failed to fetch analytics');
     }
@@ -78,7 +89,17 @@ const AdminAttendance = () => {
   const fetchAttendanceTrends = async () => {
     try {
       const response = await attendanceService.getAttendanceTrends('week');
-      setAttendanceTrends(response.data);
+      const data = response.data?.data || response.data || {};
+      // Transform backend data to chart format
+      // Backend returns: {trends: [{date, count}]}
+      // Chart expects: [{date, present}]
+      const trends = (data.trends || []).map(item => ({
+        date: item.date,
+        present: item.count,
+        absent: 0, // Not tracked in current model
+        late: 0    // Not tracked in current model
+      }));
+      setAttendanceTrends(trends);
     } catch (error) {
       console.error('Failed to fetch trends');
     }
@@ -89,9 +110,30 @@ const AdminAttendance = () => {
       const response = await attendanceService.getMealWiseAttendance({
         date: selectedDate
       });
-      setMealWiseData(response.data);
+      const data = response.data?.data || response.data || {};
+      // Transform backend data to chart format
+      // Backend returns: {mealwise: {date: {breakfast: count, lunch: count, dinner: count}}}
+      // Chart expects: [{meal_type, present, absent}]
+      const mealwise = data.mealwise || {};
+      const todayData = mealwise[selectedDate] || {};
+      const chartData = [
+        { meal_type: 'Breakfast', present: todayData.breakfast || 0, absent: 0 },
+        { meal_type: 'Lunch', present: todayData.lunch || 0, absent: 0 },
+        { meal_type: 'Dinner', present: todayData.dinner || 0, absent: 0 }
+      ];
+      setMealWiseData(chartData);
     } catch (error) {
       console.error('Failed to fetch meal-wise data');
+    }
+  };
+
+  const fetchMealPrediction = async () => {
+    try {
+      const response = await attendanceService.getMealPrediction(predictionWeeks);
+      const data = response.data?.data || response.data || null;
+      setMealPrediction(data);
+    } catch (error) {
+      console.error('Failed to fetch meal prediction');
     }
   };
 
@@ -320,6 +362,175 @@ const AdminAttendance = () => {
           </div>
         </div>
 
+        {/* Meal Prediction Section */}
+        {mealPrediction && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center">
+                <MdRestaurant className="w-6 h-6 text-primary-600 mr-2" />
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Meal Quantity Prediction</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Based on {mealPrediction.weeksAnalyzed} weeks of attendance data ({mealPrediction.totalSubscribers} active subscribers)
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <label className="text-sm text-gray-600 dark:text-gray-400">Analysis Period:</label>
+                <select
+                  value={predictionWeeks}
+                  onChange={(e) => setPredictionWeeks(parseInt(e.target.value))}
+                  className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value={2}>2 Weeks</option>
+                  <option value={4}>4 Weeks</option>
+                  <option value={8}>8 Weeks</option>
+                  <option value={12}>12 Weeks</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Next 7 Days Prediction */}
+            <div className="mb-6">
+              <h4 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-3">Next 7 Days Prediction</h4>
+              <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+                {mealPrediction.next7Days?.map((day, index) => (
+                  <div
+                    key={day.date}
+                    className={`p-4 rounded-lg border ${
+                      day.isToday
+                        ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700'
+                        : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600'
+                    }`}
+                  >
+                    <div className="text-center">
+                      <p className={`text-xs font-medium ${day.isToday ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                        {day.isToday ? 'TODAY' : day.dayName.substring(0, 3).toUpperCase()}
+                      </p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">{new Date(day.date).getDate()}</p>
+                      <div className="mt-3 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">B</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white">{day.prediction.breakfast}</span>
+                          <span className="text-xs text-green-600 dark:text-green-400">{day.ratio.breakfast}%</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">L</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white">{day.prediction.lunch}</span>
+                          <span className="text-xs text-green-600 dark:text-green-400">{day.ratio.lunch}%</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">D</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white">{day.prediction.dinner}</span>
+                          <span className="text-xs text-green-600 dark:text-green-400">{day.ratio.dinner}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Day-wise Detailed Table */}
+            <div>
+              <h4 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-3">Day-wise Attendance Ratio (Average)</h4>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Day</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Breakfast</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Lunch</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Dinner</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total Ratio</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {Object.entries(mealPrediction.predictionByDay || {}).map(([day, data]) => (
+                      <tr
+                        key={day}
+                        className={`${
+                          mealPrediction.todayDayName === day
+                            ? 'bg-primary-50 dark:bg-primary-900/20'
+                            : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        <td className="px-4 py-3">
+                          <span className={`font-medium ${
+                            mealPrediction.todayDayName === day
+                              ? 'text-primary-600 dark:text-primary-400'
+                              : 'text-gray-900 dark:text-white'
+                          }`}>
+                            {day}
+                            {mealPrediction.todayDayName === day && (
+                              <span className="ml-2 text-xs bg-primary-500 text-white px-2 py-0.5 rounded-full">Today</span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="text-lg font-bold text-gray-900 dark:text-white">{data.breakfast.predicted}</span>
+                            <span className="text-xs text-green-600 dark:text-green-400">{data.breakfast.ratio}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="text-lg font-bold text-gray-900 dark:text-white">{data.lunch.predicted}</span>
+                            <span className="text-xs text-green-600 dark:text-green-400">{data.lunch.ratio}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="text-lg font-bold text-gray-900 dark:text-white">{data.dinner.predicted}</span>
+                            <span className="text-xs text-green-600 dark:text-green-400">{data.dinner.ratio}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center">
+                            <div className="w-16 bg-gray-200 dark:bg-gray-600 rounded-full h-2 mr-2">
+                              <div
+                                className="bg-primary-500 h-2 rounded-full"
+                                style={{ width: `${Math.min(data.total.ratio, 100)}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-sm font-semibold text-gray-900 dark:text-white">{data.total.ratio}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Summary Info */}
+              {mealPrediction.summary && (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                    <p className="text-sm text-blue-600 dark:text-blue-400">Average Attendance Rate</p>
+                    <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                      {mealPrediction.summary.averageAttendanceRate?.toFixed(1) || 0}%
+                    </p>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+                    <p className="text-sm text-green-600 dark:text-green-400">Highest Attendance Day</p>
+                    <p className="text-2xl font-bold text-green-700 dark:text-green-300">
+                      {mealPrediction.summary.highestAttendanceDay?.day || 'N/A'}
+                      <span className="text-sm ml-2">({mealPrediction.summary.highestAttendanceDay?.ratio || 0}%)</span>
+                    </p>
+                  </div>
+                  <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4">
+                    <p className="text-sm text-orange-600 dark:text-orange-400">Lowest Attendance Day</p>
+                    <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">
+                      {mealPrediction.summary.lowestAttendanceDay?.day || 'N/A'}
+                      <span className="text-sm ml-2">({mealPrediction.summary.lowestAttendanceDay?.ratio || 0}%)</span>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Filters */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -444,13 +655,21 @@ const AdminAttendance = () => {
                             <FiUsers className="w-5 h-5 text-primary-600" />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">{record.user?.full_name}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">ID: {record.user_id}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              {typeof record.user_id === 'object'
+                                ? record.user_id?.full_name || 'N/A'
+                                : 'N/A'}
+                            </p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              ID: {typeof record.user_id === 'object'
+                                ? record.user_id?.user_id
+                                : record.user_id}
+                            </p>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                        {new Date(record.date).toLocaleDateString()}
+                        {new Date(record.scan_date || record.date || record.scan_time).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center">
@@ -460,9 +679,9 @@ const AdminAttendance = () => {
                       </td>
                       <td className="px-6 py-4">
                         <select
-                          value={record.status}
+                          value={record.status || 'present'}
                           onChange={(e) => handleUpdateAttendance(record.attendance_id, e.target.value)}
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border-0 ${getStatusColor(record.status)}`}
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border-0 ${getStatusColor(record.status || 'present')}`}
                         >
                           <option value="present">Present</option>
                           <option value="absent">Absent</option>
@@ -470,7 +689,8 @@ const AdminAttendance = () => {
                         </select>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                        {record.marked_at ? new Date(record.marked_at).toLocaleTimeString() : '-'}
+                        {record.scan_time ? new Date(record.scan_time).toLocaleTimeString() :
+                         record.created_at ? new Date(record.created_at).toLocaleTimeString() : '-'}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-2">

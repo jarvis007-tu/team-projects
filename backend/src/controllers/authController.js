@@ -1,4 +1,4 @@
-const { User, Subscription, Mess } = require('../models');
+const { User, Subscription, Mess, Notification } = require('../models');
 const jwtManager = require('../utils/jwt');
 const { redisClient } = require('../config/redis-optional');
 const logger = require('../utils/logger');
@@ -76,6 +76,22 @@ class AuthController {
       // Store refresh token
       await jwtManager.storeRefreshToken(user._id.toString(), tokens.refreshToken);
 
+      // Create welcome notification for the new user
+      try {
+        await Notification.create({
+          user_id: user._id,
+          mess_id: mess._id,
+          title: 'Welcome to Hostel Eats!',
+          message: `Hi ${full_name}, welcome to ${mess.name}! Your account has been created successfully. Please contact the mess administrator to set up your subscription and start enjoying our meal services.`,
+          type: 'announcement',
+          priority: 'medium',
+          status: 'sent'
+        });
+      } catch (notificationError) {
+        // Don't fail registration if notification fails
+        logger.warn('Failed to create welcome notification:', notificationError.message);
+      }
+
       // Log registration
       logger.info(`New user registered: ${user._id} - ${user.email}`);
 
@@ -101,21 +117,26 @@ class AuthController {
         throw new AppError('Email/Phone and password are required', 400);
       }
 
-      // Build query for email or phone
-      const query = { deleted_at: null };
+      // Build query for email or phone (without deleted_at filter first to check for deleted accounts)
+      const identityQuery = {};
       if (email && phone) {
-        query.$or = [{ email }, { phone }];
+        identityQuery.$or = [{ email }, { phone }];
       } else if (email) {
-        query.email = email;
+        identityQuery.email = email;
       } else if (phone) {
-        query.phone = phone;
+        identityQuery.phone = phone;
       }
 
       // Find user - need password for validation
-      const user = await User.findOne(query).select('+password').populate('mess_id', 'name code');
+      const user = await User.findOne(identityQuery).select('+password').populate('mess_id', 'name code');
 
       if (!user) {
         throw new AppError('Invalid credentials', 401);
+      }
+
+      // Check if account has been deleted
+      if (user.deleted_at) {
+        throw new AppError('Your account has been deleted by the administrator. Please contact support if you believe this is an error.', 403);
       }
 
       // Check if account is locked
@@ -129,12 +150,16 @@ class AuthController {
 
       if (!isValidPassword) {
         await user.incrementLoginAttempts();
-        throw new AppError('Invalid credentials', 401);
+        throw new AppError('Incorrect password', 401);
       }
 
-      // Check user status
-      if (user.status !== 'active') {
-        throw new AppError(`Account is ${user.status}`, 403);
+      // Check user status - only block 'suspended' and 'blocked' users
+      // 'inactive' users can still log in but may have limited access
+      if (user.status === 'blocked') {
+        throw new AppError('Your account has been blocked. Please contact support.', 403);
+      }
+      if (user.status === 'suspended') {
+        throw new AppError('Your account has been suspended. Please contact support.', 403);
       }
 
       // Reset login attempts
@@ -220,8 +245,12 @@ class AuthController {
 
       // Get user
       const user = await User.findById(decoded.userId);
-      if (!user || user.status !== 'active') {
-        throw new AppError('User not found or inactive', 401);
+      if (!user) {
+        throw new AppError('User not found', 401);
+      }
+      // Only block 'suspended' and 'blocked' users from refreshing tokens
+      if (user.status === 'blocked' || user.status === 'suspended') {
+        throw new AppError(`Account is ${user.status}. Please contact support.`, 401);
       }
 
       // Generate new tokens
@@ -328,15 +357,11 @@ class AuthController {
         throw new AppError('Email is required', 400);
       }
 
-      const user = await User.findOne({ email });
+      const user = await User.findOne({ email, deleted_at: null });
 
       if (!user) {
-        // Don't reveal if user exists
-        res.json({
-          success: true,
-          message: 'If the email exists, a reset link has been sent'
-        });
-        return;
+        // Return specific error message when email is not found
+        throw new AppError('No account found with this email address. Please check the email or register a new account.', 404);
       }
 
       // Generate reset token
@@ -471,7 +496,7 @@ class AuthController {
   async updateProfile(req, res, next) {
     try {
       const userId = req.user.user_id;
-      const { full_name, phone, preferences } = req.body;
+      const { full_name, phone, preferences, profile_image } = req.body;
 
       const user = await User.findById(userId);
       if (!user) {
@@ -482,6 +507,7 @@ class AuthController {
       if (full_name) user.full_name = full_name;
       if (phone) user.phone = phone;
       if (preferences) user.preferences = { ...user.preferences, ...preferences };
+      if (profile_image !== undefined) user.profile_image = profile_image;
 
       await user.save();
 
@@ -556,6 +582,95 @@ class AuthController {
       res.json({
         success: true,
         message: 'Device ID updated successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async uploadProfileImage(req, res, next) {
+    try {
+      const userId = req.user.user_id;
+      const { image } = req.body;
+
+      if (!image) {
+        throw new AppError('Image data is required', 400);
+      }
+
+      // Validate base64 image format
+      const base64Regex = /^data:image\/(jpeg|jpg|png|gif|webp);base64,/;
+      if (!base64Regex.test(image)) {
+        throw new AppError('Invalid image format. Please upload a valid image (JPEG, PNG, GIF, or WebP)', 400);
+      }
+
+      // Check image size (limit to 2MB for base64 - roughly 2.7MB in base64 encoding)
+      const base64Data = image.split(',')[1];
+      const sizeInBytes = Buffer.from(base64Data, 'base64').length;
+      const maxSize = 2 * 1024 * 1024; // 2MB
+
+      if (sizeInBytes > maxSize) {
+        throw new AppError('Image size must be less than 2MB', 400);
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new AppError('User not found', 404);
+      }
+
+      // Store the base64 image data
+      user.profile_image = image;
+      await user.save();
+
+      // Clear cache (if Redis is available)
+      try {
+        if (redisClient && redisClient.isReady) {
+          await redisClient.del(`user:${userId}`);
+        }
+      } catch (cacheError) {
+        logger.debug('Redis cache clear failed during profile image upload:', cacheError.message);
+      }
+
+      logger.info(`Profile image updated for user: ${userId}`);
+
+      res.json({
+        success: true,
+        message: 'Profile image uploaded successfully',
+        data: {
+          profile_image: user.profile_image
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async removeProfileImage(req, res, next) {
+    try {
+      const userId = req.user.user_id;
+
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new AppError('User not found', 404);
+      }
+
+      // Remove the profile image
+      user.profile_image = null;
+      await user.save();
+
+      // Clear cache (if Redis is available)
+      try {
+        if (redisClient && redisClient.isReady) {
+          await redisClient.del(`user:${userId}`);
+        }
+      } catch (cacheError) {
+        logger.debug('Redis cache clear failed during profile image removal:', cacheError.message);
+      }
+
+      logger.info(`Profile image removed for user: ${userId}`);
+
+      res.json({
+        success: true,
+        message: 'Profile image removed successfully'
       });
     } catch (error) {
       next(error);

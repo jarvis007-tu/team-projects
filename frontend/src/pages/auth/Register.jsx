@@ -21,6 +21,28 @@ const Register = () => {
     confirm_password: '',
     mess_id: ''
   });
+  const [errors, setErrors] = useState({});
+
+  // Validation helper functions
+  const validateEmail = (email) => {
+    // Check for proper email format with domain
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return emailRegex.test(email);
+  };
+
+  const validatePhone = (phone) => {
+    // Indian phone number: 10 digits, starts with 6-9
+    const phoneRegex = /^[6-9]\d{9}$/;
+    return phoneRegex.test(phone);
+  };
+
+  const validatePassword = (password) => {
+    // Min 8 chars, at least one number, at least one special character
+    const hasMinLength = password.length >= 8;
+    const hasNumber = /\d/.test(password);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/`~]/.test(password);
+    return { hasMinLength, hasNumber, hasSpecialChar, isValid: hasMinLength && hasNumber && hasSpecialChar };
+  };
 
   // Fetch active messes on component mount
   useEffect(() => {
@@ -42,28 +64,96 @@ const Register = () => {
   };
 
   const handleChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     });
+
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors({ ...errors, [name]: '' });
+    }
+
+    // Real-time validation feedback
+    if (name === 'email' && value) {
+      if (!validateEmail(value)) {
+        setErrors(prev => ({ ...prev, email: 'Please enter a valid email address (e.g., user@example.com)' }));
+      }
+    }
+
+    if (name === 'phone' && value) {
+      if (!validatePhone(value)) {
+        setErrors(prev => ({ ...prev, phone: 'Phone number must be 10 digits and start with 6-9 (Indian format)' }));
+      }
+    }
+
+    if (name === 'password' && value) {
+      const pwdValidation = validatePassword(value);
+      if (!pwdValidation.isValid) {
+        let pwdErrors = [];
+        if (!pwdValidation.hasMinLength) pwdErrors.push('minimum 8 characters');
+        if (!pwdValidation.hasNumber) pwdErrors.push('at least one number');
+        if (!pwdValidation.hasSpecialChar) pwdErrors.push('at least one special character');
+        setErrors(prev => ({ ...prev, password: `Password must have: ${pwdErrors.join(', ')}` }));
+      }
+    }
+
+    if (name === 'mess_id' && !value) {
+      setErrors(prev => ({ ...prev, mess_id: 'Please select the mess' }));
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validation
-    // if (!formData.mess_id) {
-    //   toast.error('Please select a mess');
-    //   return;
-    // }
+    // Full validation before submit
+    const newErrors = {};
 
-    if (formData.password !== formData.confirm_password) {
-      toast.error('Passwords do not match');
-      return;
+    // Email validation
+    if (!formData.email) {
+      newErrors.email = 'Email address is required';
+    } else if (!validateEmail(formData.email)) {
+      newErrors.email = 'Please enter a valid email address (e.g., user@example.com)';
     }
 
-    if (formData.password.length < 8) {
-      toast.error('Password must be at least 8 characters');
+    // Phone validation
+    if (!formData.phone) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!validatePhone(formData.phone)) {
+      newErrors.phone = 'Phone number must be 10 digits and start with 6-9 (Indian format)';
+    }
+
+    // Mess selection validation
+    if (!formData.mess_id) {
+      newErrors.mess_id = 'Please select the mess';
+    }
+
+    // Password validation
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else {
+      const pwdValidation = validatePassword(formData.password);
+      if (!pwdValidation.isValid) {
+        let pwdErrors = [];
+        if (!pwdValidation.hasMinLength) pwdErrors.push('minimum 8 characters');
+        if (!pwdValidation.hasNumber) pwdErrors.push('at least one number');
+        if (!pwdValidation.hasSpecialChar) pwdErrors.push('at least one special character');
+        newErrors.password = `Password must have: ${pwdErrors.join(', ')}`;
+      }
+    }
+
+    // Confirm password validation
+    if (formData.password !== formData.confirm_password) {
+      newErrors.confirm_password = 'Passwords do not match';
+    }
+
+    // If there are validation errors, show them and stop
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      // Show first error as toast
+      const firstError = Object.values(newErrors)[0];
+      toast.error(firstError);
       return;
     }
 
@@ -83,7 +173,27 @@ const Register = () => {
         navigate('/login');
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Registration failed');
+      // Show actual API error message instead of generic "Registration failed"
+      // Handle different error response structures
+      let errorMessage = 'Registration failed. Please try again.';
+
+      if (error.response?.data?.message) {
+        // Standard API error response
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        // Alternative error structure
+        errorMessage = error.response.data.error;
+      } else if (error.message && error.message !== 'Request failed with status code 409') {
+        // Use error.message only if it's meaningful
+        errorMessage = error.message;
+      }
+
+      // For 409 conflict (user already exists), show specific message
+      if (error.response?.status === 409) {
+        errorMessage = error.response?.data?.message || 'User with this email or phone already exists';
+      }
+
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -173,18 +283,22 @@ const Register = () => {
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <FiMail className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-200" />
+                    <FiMail className={`h-5 w-5 ${errors.email ? 'text-red-500' : 'text-gray-400'} group-focus-within:text-blue-500 transition-colors duration-200`} />
                   </div>
                   <input
                     type="email"
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-3.5 bg-gray-50 dark:bg-slate-700/50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:bg-white dark:focus:bg-slate-700 transition-all duration-200 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                    placeholder="Enter your email"
+                    className={`w-full pl-12 pr-4 py-3.5 bg-gray-50 dark:bg-slate-700/50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:bg-white dark:focus:bg-slate-700 transition-all duration-200 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 ${errors.email ? 'ring-2 ring-red-500/50' : ''}`}
+                    placeholder="Enter your email (e.g., user@example.com)"
                     required
                   />
                 </div>
+                {errors.email && (
+                  <p className="text-sm text-red-500 dark:text-red-400 mt-1">{errors.email}</p>
+                )}
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter a valid email with complete domain (e.g., user@example.com)</p>
               </div>
 
               {/* Phone */}
@@ -194,19 +308,23 @@ const Register = () => {
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <FiPhone className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-200" />
+                    <FiPhone className={`h-5 w-5 ${errors.phone ? 'text-red-500' : 'text-gray-400'} group-focus-within:text-blue-500 transition-colors duration-200`} />
                   </div>
                   <input
                     type="tel"
                     name="phone"
                     value={formData.phone}
                     onChange={handleChange}
-                    pattern="[0-9]{10}"
-                    className="w-full pl-12 pr-4 py-3.5 bg-gray-50 dark:bg-slate-700/50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:bg-white dark:focus:bg-slate-700 transition-all duration-200 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                    placeholder="10-digit phone number"
+                    maxLength={10}
+                    className={`w-full pl-12 pr-4 py-3.5 bg-gray-50 dark:bg-slate-700/50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:bg-white dark:focus:bg-slate-700 transition-all duration-200 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 ${errors.phone ? 'ring-2 ring-red-500/50' : ''}`}
+                    placeholder="10-digit Indian phone number"
                     required
                   />
                 </div>
+                {errors.phone && (
+                  <p className="text-sm text-red-500 dark:text-red-400 mt-1">{errors.phone}</p>
+                )}
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Must be 10 digits, starting with 6-9 (Indian format)</p>
               </div>
 
               {/* Mess Selection */}
@@ -216,18 +334,18 @@ const Register = () => {
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
-                    <FiMapPin className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-200" />
+                    <FiMapPin className={`h-5 w-5 ${errors.mess_id ? 'text-red-500' : 'text-gray-400'} group-focus-within:text-blue-500 transition-colors duration-200`} />
                   </div>
                   <select
                     name="mess_id"
                     value={formData.mess_id}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-3.5 bg-gray-50 dark:bg-slate-700/50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:bg-white dark:focus:bg-slate-700 transition-all duration-200 text-gray-900 dark:text-white appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                    className={`w-full pl-12 pr-4 py-3.5 bg-gray-50 dark:bg-slate-700/50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:bg-white dark:focus:bg-slate-700 transition-all duration-200 text-gray-900 dark:text-white appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${errors.mess_id ? 'ring-2 ring-red-500/50' : ''}`}
                     required
                     disabled={loadingMesses}
                   >
                     <option value="" className="bg-white dark:bg-slate-700 text-gray-900 dark:text-white">
-                      {loadingMesses ? 'Loading messes...' : 'Choose your mess location'}
+                      {loadingMesses ? 'Loading messes...' : 'Please select the mess'}
                     </option>
                     {messes.map((mess) => (
                       <option
@@ -246,6 +364,10 @@ const Register = () => {
                     </svg>
                   </div>
                 </div>
+                {errors.mess_id && (
+                  <p className="text-sm text-red-500 dark:text-red-400 mt-1">{errors.mess_id}</p>
+                )}
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Please select the mess you want to join</p>
                 {formData.mess_id && (
                   <motion.p
                     initial={{ opacity: 0, y: -10 }}
@@ -264,15 +386,15 @@ const Register = () => {
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <FiLock className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-200" />
+                    <FiLock className={`h-5 w-5 ${errors.password ? 'text-red-500' : 'text-gray-400'} group-focus-within:text-blue-500 transition-colors duration-200`} />
                   </div>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-12 py-3.5 bg-gray-50 dark:bg-slate-700/50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:bg-white dark:focus:bg-slate-700 transition-all duration-200 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                    placeholder="Create a password (min. 8 characters)"
+                    className={`w-full pl-12 pr-12 py-3.5 bg-gray-50 dark:bg-slate-700/50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:bg-white dark:focus:bg-slate-700 transition-all duration-200 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 ${errors.password ? 'ring-2 ring-red-500/50' : ''}`}
+                    placeholder="Create a strong password"
                     required
                   />
                   <button
@@ -287,6 +409,10 @@ const Register = () => {
                     )}
                   </button>
                 </div>
+                {errors.password && (
+                  <p className="text-sm text-red-500 dark:text-red-400 mt-1">{errors.password}</p>
+                )}
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Must be at least 8 characters with numbers and special characters</p>
               </div>
 
               {/* Confirm Password */}
@@ -296,14 +422,14 @@ const Register = () => {
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <FiLock className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-200" />
+                    <FiLock className={`h-5 w-5 ${errors.confirm_password ? 'text-red-500' : 'text-gray-400'} group-focus-within:text-blue-500 transition-colors duration-200`} />
                   </div>
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     name="confirm_password"
                     value={formData.confirm_password}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-12 py-3.5 bg-gray-50 dark:bg-slate-700/50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:bg-white dark:focus:bg-slate-700 transition-all duration-200 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                    className={`w-full pl-12 pr-12 py-3.5 bg-gray-50 dark:bg-slate-700/50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:bg-white dark:focus:bg-slate-700 transition-all duration-200 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 ${errors.confirm_password ? 'ring-2 ring-red-500/50' : ''}`}
                     placeholder="Confirm your password"
                     required
                   />
@@ -319,6 +445,9 @@ const Register = () => {
                     )}
                   </button>
                 </div>
+                {errors.confirm_password && (
+                  <p className="text-sm text-red-500 dark:text-red-400 mt-1">{errors.confirm_password}</p>
+                )}
               </div>
 
               {/* Submit Button */}

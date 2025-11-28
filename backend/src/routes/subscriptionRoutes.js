@@ -21,14 +21,14 @@ router.get('/active', authenticate, subscriptionController.getActiveSubscription
 router.get('/user/:userId', authenticate, authorize('super_admin', 'mess_admin'), subscriptionController.getUserSubscriptions);
 router.get('/:id', authenticate, subscriptionController.getSubscriptionById);
 
-// Subscription management
-router.post('/', authenticate, authorize('super_admin', 'mess_admin'), validateSubscriptionCreate, subscriptionController.createSubscription);
-router.put('/:id', authenticate, authorize('super_admin', 'mess_admin'), validateSubscriptionUpdate, subscriptionController.updateSubscription);
-router.delete('/:id', authenticate, authorize('super_admin', 'mess_admin'), subscriptionController.deleteSubscription);
-router.post('/:id/cancel', authenticate, subscriptionController.cancelSubscription);
-router.post('/:id/renew', authenticate, subscriptionController.renewSubscription);
+// Subscription management - Super Admin only
+router.post('/', authenticate, authorize('super_admin'), validateSubscriptionCreate, subscriptionController.createSubscription);
+router.put('/:id', authenticate, authorize('super_admin'), validateSubscriptionUpdate, subscriptionController.updateSubscription);
+router.delete('/:id', authenticate, authorize('super_admin'), subscriptionController.deleteSubscription);
+router.post('/:id/cancel', authenticate, authorize('super_admin'), subscriptionController.cancelSubscription);
+router.post('/:id/renew', authenticate, authorize('super_admin'), subscriptionController.renewSubscription);
 
-// Bulk operations
-router.patch('/bulk', authenticate, authorize('super_admin', 'mess_admin'), subscriptionController.bulkUpdateSubscriptions);
+// Bulk operations - Super Admin only
+router.patch('/bulk', authenticate, authorize('super_admin'), subscriptionController.bulkUpdateSubscriptions);
 
 module.exports = router;

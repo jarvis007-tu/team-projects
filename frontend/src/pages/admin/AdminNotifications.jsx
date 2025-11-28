@@ -266,25 +266,25 @@ const AdminNotifications = () => {
   const statsCards = [
     {
       title: 'Total Sent',
-      value: analytics.totalSent,
+      value: analytics.totalSent || 0,
       icon: FiSend,
       color: 'primary'
     },
     {
       title: 'Delivery Rate',
-      value: `${analytics.deliveryRate}%`,
+      value: `${analytics.deliveryRate != null ? analytics.deliveryRate : 0}%`,
       icon: FiCheckCircle,
       color: 'success'
     },
     {
       title: 'Open Rate',
-      value: `${analytics.openRate}%`,
+      value: `${analytics.openRate != null ? analytics.openRate : 0}%`,
       icon: FiBell,
       color: 'info'
     },
     {
       title: 'Click Rate',
-      value: `${analytics.clickRate}%`,
+      value: `${analytics.clickRate != null ? analytics.clickRate : 0}%`,
       icon: FiTarget,
       color: 'warning'
     }

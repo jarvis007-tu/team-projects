@@ -23,21 +23,29 @@ import { useTheme } from '../contexts/ThemeContext';
 
 const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, isSuperAdmin, isMessAdmin } = useAuth();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
 
-  const navigation = [
-    { name: 'Dashboard', href: '/admin/dashboard', icon: HomeIcon },
-    { name: 'Messes', href: '/admin/messes', icon: BuildingOfficeIcon },
-    { name: 'Users', href: '/admin/users', icon: UsersIcon },
-    { name: 'Subscriptions', href: '/admin/subscriptions', icon: CreditCardIcon },
-    { name: 'Attendance', href: '/admin/attendance', icon: ClipboardDocumentCheckIcon },
-    { name: 'Menu', href: '/admin/menu', icon: CalendarDaysIcon },
-    { name: 'Reports', href: '/admin/reports', icon: ChartBarIcon },
-    { name: 'Notifications', href: '/admin/notifications', icon: BellIcon },
-    { name: 'Settings', href: '/admin/settings', icon: Cog6ToothIcon },
+  // Build navigation based on role
+  // - super_admin: sees all menu items including "Messes"
+  // - mess_admin: sees all menu items EXCEPT "Messes"
+  const allNavigation = [
+    { name: 'Dashboard', href: '/admin/dashboard', icon: HomeIcon, roles: ['super_admin', 'mess_admin'] },
+    { name: 'Messes', href: '/admin/messes', icon: BuildingOfficeIcon, roles: ['super_admin'] }, // SUPER ADMIN ONLY
+    { name: 'Users', href: '/admin/users', icon: UsersIcon, roles: ['super_admin', 'mess_admin'] },
+    { name: 'Subscriptions', href: '/admin/subscriptions', icon: CreditCardIcon, roles: ['super_admin', 'mess_admin'] },
+    { name: 'Attendance', href: '/admin/attendance', icon: ClipboardDocumentCheckIcon, roles: ['super_admin', 'mess_admin'] },
+    { name: 'Menu', href: '/admin/menu', icon: CalendarDaysIcon, roles: ['super_admin', 'mess_admin'] },
+    { name: 'Reports', href: '/admin/reports', icon: ChartBarIcon, roles: ['super_admin', 'mess_admin'] },
+    { name: 'Notifications', href: '/admin/notifications', icon: BellIcon, roles: ['super_admin', 'mess_admin'] },
+    { name: 'Settings', href: '/admin/settings', icon: Cog6ToothIcon, roles: ['super_admin', 'mess_admin'] },
   ];
+
+  // Filter navigation based on user role
+  const navigation = allNavigation.filter(item =>
+    item.roles.includes(user?.role)
+  );
 
   const handleLogout = async () => {
     await logout();

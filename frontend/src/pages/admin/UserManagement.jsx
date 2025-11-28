@@ -29,6 +29,7 @@ const UserManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterSubscriptionStatus, setFilterSubscriptionStatus] = useState('all');
   const [filterMess, setFilterMess] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -44,6 +45,27 @@ const UserManagement = () => {
     role: 'subscriber',
     status: 'active'
   });
+  const [formErrors, setFormErrors] = useState({});
+
+  // Validation helper functions
+  const validateEmail = (email) => {
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return emailRegex.test(email);
+  };
+
+  const validatePhone = (phone) => {
+    // Indian phone number: 10 digits, starts with 6-9
+    const phoneRegex = /^[6-9]\d{9}$/;
+    return phoneRegex.test(phone);
+  };
+
+  const validatePassword = (password) => {
+    // Min 6 chars for admin panel, at least one number, at least one special character
+    const hasMinLength = password.length >= 6;
+    const hasNumber = /\d/.test(password);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/`~]/.test(password);
+    return { hasMinLength, hasNumber, hasSpecialChar, isValid: hasMinLength && hasNumber && hasSpecialChar };
+  };
 
   // Fetch messes only once on mount
   useEffect(() => {
@@ -57,7 +79,7 @@ const UserManagement = () => {
     }, 300);
 
     return () => clearTimeout(debounceTimer);
-  }, [currentPage, searchTerm, filterRole, filterStatus, filterMess]);
+  }, [currentPage, searchTerm, filterRole, filterStatus, filterSubscriptionStatus, filterMess]);
 
   const fetchMesses = async () => {
     try {
@@ -90,6 +112,7 @@ const UserManagement = () => {
       if (searchTerm) params.search = searchTerm;
       if (filterRole !== 'all') params.role = filterRole;
       if (filterStatus !== 'all') params.status = filterStatus;
+      if (filterSubscriptionStatus !== 'all') params.subscription_status = filterSubscriptionStatus;
       if (filterMess !== 'all') params.mess_id = filterMess;
 
       const response = await userService.getAllUsers(params);
@@ -109,22 +132,91 @@ const UserManagement = () => {
       ...prev,
       [name]: value
     }));
+
+    // Clear error when user starts typing
+    setFormErrors(prev => ({ ...prev, [name]: '' }));
+
+    // Real-time validation feedback
+    if (name === 'email' && value) {
+      if (!validateEmail(value)) {
+        setFormErrors(prev => ({ ...prev, email: 'Please enter a valid email address (e.g., user@example.com)' }));
+      }
+    }
+
+    if (name === 'phone' && value) {
+      if (!validatePhone(value)) {
+        setFormErrors(prev => ({ ...prev, phone: 'Phone number must be 10 digits and start with 6-9 (Indian format)' }));
+      }
+    }
+
+    if (name === 'password' && value) {
+      const pwdValidation = validatePassword(value);
+      if (!pwdValidation.isValid) {
+        let pwdErrors = [];
+        if (!pwdValidation.hasMinLength) pwdErrors.push('minimum 6 characters');
+        if (!pwdValidation.hasNumber) pwdErrors.push('at least one number');
+        if (!pwdValidation.hasSpecialChar) pwdErrors.push('at least one special character');
+        setFormErrors(prev => ({ ...prev, password: `Password must have: ${pwdErrors.join(', ')}` }));
+      }
+    }
+
+    if (name === 'mess_id' && !value) {
+      setFormErrors(prev => ({ ...prev, mess_id: 'Please select the mess' }));
+    }
   }, []); // Empty deps - function never needs to change
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
 
+    // Full validation before submit
+    const newErrors = {};
+
+    // Email validation
+    if (!formData.email) {
+      newErrors.email = 'Email address is required';
+    } else if (!validateEmail(formData.email)) {
+      newErrors.email = 'Please enter a valid email address (e.g., user@example.com)';
+    }
+
+    // Phone validation
+    if (!formData.phone) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!validatePhone(formData.phone)) {
+      newErrors.phone = 'Phone number must be 10 digits and start with 6-9 (Indian format)';
+    }
+
+    // Mess selection validation (Super Admin only)
+    if (isSuperAdmin && !formData.mess_id) {
+      newErrors.mess_id = 'Please select the mess';
+    }
+
+    // Password validation
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else {
+      const pwdValidation = validatePassword(formData.password);
+      if (!pwdValidation.isValid) {
+        let pwdErrors = [];
+        if (!pwdValidation.hasMinLength) pwdErrors.push('minimum 6 characters');
+        if (!pwdValidation.hasNumber) pwdErrors.push('at least one number');
+        if (!pwdValidation.hasSpecialChar) pwdErrors.push('at least one special character');
+        newErrors.password = `Password must have: ${pwdErrors.join(', ')}`;
+      }
+    }
+
+    // If there are validation errors, show them and stop
+    if (Object.keys(newErrors).length > 0) {
+      setFormErrors(newErrors);
+      const firstError = Object.values(newErrors)[0];
+      toast.error(firstError);
+      return;
+    }
+
     try {
       const userData = { ...formData };
 
       // Handle mess_id properly
-      if (isSuperAdmin) {
-        // Super admin must provide mess_id
-        if (!formData.mess_id) {
-          toast.error('Please select a mess');
-          return;
-        }
-      } else {
+      if (!isSuperAdmin) {
         // Mess admin uses their own mess_id
         userData.mess_id = currentUser.mess_id;
       }
@@ -135,12 +227,68 @@ const UserManagement = () => {
       resetForm();
       fetchUsers();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to create user');
+      // Show actual API error message
+      let errorMessage = 'Failed to create user';
+
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      }
+
+      // For 409 conflict (user already exists)
+      if (error.response?.status === 409) {
+        errorMessage = error.response?.data?.message || 'User with this email or phone already exists';
+      }
+
+      toast.error(errorMessage);
     }
   };
 
   const handleUpdateUser = async (e) => {
     e.preventDefault();
+
+    // Full validation before submit
+    const newErrors = {};
+
+    // Email validation
+    if (!formData.email) {
+      newErrors.email = 'Email address is required';
+    } else if (!validateEmail(formData.email)) {
+      newErrors.email = 'Please enter a valid email address (e.g., user@example.com)';
+    }
+
+    // Phone validation
+    if (!formData.phone) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!validatePhone(formData.phone)) {
+      newErrors.phone = 'Phone number must be 10 digits and start with 6-9 (Indian format)';
+    }
+
+    // Mess selection validation (Super Admin only)
+    if (isSuperAdmin && !formData.mess_id) {
+      newErrors.mess_id = 'Please select the mess';
+    }
+
+    // Password validation (only if provided)
+    if (formData.password) {
+      const pwdValidation = validatePassword(formData.password);
+      if (!pwdValidation.isValid) {
+        let pwdErrors = [];
+        if (!pwdValidation.hasMinLength) pwdErrors.push('minimum 6 characters');
+        if (!pwdValidation.hasNumber) pwdErrors.push('at least one number');
+        if (!pwdValidation.hasSpecialChar) pwdErrors.push('at least one special character');
+        newErrors.password = `Password must have: ${pwdErrors.join(', ')}`;
+      }
+    }
+
+    // If there are validation errors, show them and stop
+    if (Object.keys(newErrors).length > 0) {
+      setFormErrors(newErrors);
+      const firstError = Object.values(newErrors)[0];
+      toast.error(firstError);
+      return;
+    }
 
     try {
       const updateData = { ...formData };
@@ -150,23 +298,44 @@ const UserManagement = () => {
         delete updateData.password;
       }
 
-      // Handle mess_id for super admin
-      if (isSuperAdmin && !updateData.mess_id) {
-        toast.error('Please select a mess');
-        return;
-      }
-
       await userService.updateUser(selectedUser._id || selectedUser.user_id, updateData);
       toast.success('User updated successfully!');
       setShowEditModal(false);
       resetForm();
       fetchUsers();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to update user');
+      // Show actual API error message
+      let errorMessage = 'Failed to update user';
+
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      }
+
+      // For 409 conflict (duplicate email/phone)
+      if (error.response?.status === 409) {
+        errorMessage = error.response?.data?.message || 'User with this email or phone already exists';
+      }
+
+      toast.error(errorMessage);
     }
   };
 
-  const handleDeleteUser = async (userId) => {
+  const handleDeleteUser = async (userId, userRole) => {
+    // Prevent deleting yourself
+    const currentUserId = currentUser?._id || currentUser?.user_id;
+    if (userId === currentUserId) {
+      toast.error('You cannot delete your own account');
+      return;
+    }
+
+    // Mess admins cannot delete other mess admins - only super admin can
+    if (!isSuperAdmin && (userRole === 'mess_admin' || userRole === 'super_admin')) {
+      toast.error('Only Super Admin can delete admin accounts');
+      return;
+    }
+
     if (!window.confirm('Are you sure you want to delete this user?')) {
       return;
     }
@@ -209,6 +378,7 @@ const UserManagement = () => {
       role: 'subscriber',
       status: 'active'
     });
+    setFormErrors({});
     setSelectedUser(null);
   };
 
@@ -224,10 +394,24 @@ const UserManagement = () => {
   const getStatusBadge = (status) => {
     const badges = {
       active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-      inactive: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
-      suspended: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+      inactive: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+      suspended: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+      blocked: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
     };
     return badges[status] || badges.inactive;
+  };
+
+  // Get subscription-based status for subscribers
+  const getSubscriptionStatus = (user) => {
+    // For admins, show account status
+    if (user.role === 'super_admin' || user.role === 'mess_admin') {
+      return { status: user.status, label: user.status?.toUpperCase() };
+    }
+    // For subscribers, show subscription status
+    if (user.has_active_subscription) {
+      return { status: 'active', label: 'ACTIVE' };
+    }
+    return { status: 'inactive', label: 'INACTIVE' };
   };
 
   const UserFormModal = useMemo(() => {
@@ -273,16 +457,20 @@ const UserManagement = () => {
                         name="mess_id"
                         value={formData.mess_id}
                         onChange={handleInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
+                        className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all ${formErrors.mess_id ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                         required
                       >
-                        <option value="">Select Mess</option>
+                        <option value="">Please select the mess</option>
                         {messes.map((mess) => (
                           <option key={mess._id || mess.mess_id} value={mess._id || mess.mess_id}>
                             {mess.name} ({mess.code})
                           </option>
                         ))}
                       </select>
+                      {formErrors.mess_id && (
+                        <p className="text-sm text-red-500 mt-1">{formErrors.mess_id}</p>
+                      )}
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Please select the mess for this user</p>
                     </div>
                   )}
 
@@ -332,10 +520,14 @@ const UserManagement = () => {
                         name="email"
                         value={formData.email}
                         onChange={handleInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
+                        className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all ${formErrors.email ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                         placeholder="user@example.com"
                         required
                       />
+                      {formErrors.email && (
+                        <p className="text-sm text-red-500 mt-1">{formErrors.email}</p>
+                      )}
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter a valid email with complete domain</p>
                     </div>
 
                     <div>
@@ -347,11 +539,15 @@ const UserManagement = () => {
                         name="phone"
                         value={formData.phone}
                         onChange={handleInputChange}
-                        pattern="[0-9]{10}"
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
-                        placeholder="10 digits"
+                        maxLength={10}
+                        className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all ${formErrors.phone ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
+                        placeholder="10-digit Indian phone number"
                         required
                       />
+                      {formErrors.phone && (
+                        <p className="text-sm text-red-500 mt-1">{formErrors.phone}</p>
+                      )}
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Must be 10 digits, starting with 6-9</p>
                     </div>
                   </div>
 
@@ -367,11 +563,14 @@ const UserManagement = () => {
                         name="password"
                         value={formData.password}
                         onChange={handleInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all"
-                        placeholder="••••••••"
+                        className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition-all ${formErrors.password ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
+                        placeholder="Create a strong password"
                         required={!isEdit}
-                        minLength="6"
                       />
+                      {formErrors.password && (
+                        <p className="text-sm text-red-500 mt-1">{formErrors.password}</p>
+                      )}
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Min 6 characters with numbers and special characters</p>
                     </div>
 
                     <div>
@@ -386,9 +585,13 @@ const UserManagement = () => {
                         required
                       >
                         <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
+                        <option value="inactive">Inactive (Limited Access)</option>
                         <option value="suspended">Suspended</option>
+                        <option value="blocked">Blocked</option>
                       </select>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Active: Full access | Inactive: Can log in with limited access | Suspended/Blocked: Cannot log in
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -442,7 +645,7 @@ const UserManagement = () => {
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {/* Search */}
           <div className="relative">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -467,16 +670,28 @@ const UserManagement = () => {
             <option value="subscriber">Subscriber</option>
           </select>
 
-          {/* Status Filter */}
+          {/* Account Status Filter (User's account status) */}
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white"
           >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="all">All Account Status</option>
+            <option value="active">Active Account</option>
+            <option value="inactive">Inactive Account</option>
             <option value="suspended">Suspended</option>
+            <option value="blocked">Blocked</option>
+          </select>
+
+          {/* Subscription Status Filter (For subscribers only) */}
+          <select
+            value={filterSubscriptionStatus}
+            onChange={(e) => setFilterSubscriptionStatus(e.target.value)}
+            className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white"
+          >
+            <option value="all">All Subscription Status</option>
+            <option value="subscribed">Active Subscription</option>
+            <option value="not_subscribed">No Active Subscription</option>
           </select>
 
           {/* Mess Filter - Super Admin Only */}
@@ -526,7 +741,8 @@ const UserManagement = () => {
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Contact</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Mess</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Account</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Subscription</th>
                   <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -570,8 +786,18 @@ const UserManagement = () => {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusBadge(user.status)}`}>
-                        {user.status?.toUpperCase()}
+                        {user.status?.toUpperCase() || 'N/A'}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {(() => {
+                        const subStatus = getSubscriptionStatus(user);
+                        return (
+                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusBadge(subStatus.status)}`}>
+                            {subStatus.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
@@ -582,13 +808,31 @@ const UserManagement = () => {
                         >
                           <PencilSquareIcon className="w-5 h-5" />
                         </button>
-                        <button
-                          onClick={() => handleDeleteUser(user._id || user.user_id)}
-                          className="p-2.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                          title="Delete User"
-                        >
-                          <TrashIcon className="w-5 h-5" />
-                        </button>
+                        {(() => {
+                          const isCurrentUser = (currentUser?._id || currentUser?.user_id) === (user._id || user.user_id);
+                          const isAdminAndNotSuperAdmin = !isSuperAdmin && (user.role === 'mess_admin' || user.role === 'super_admin');
+                          const isDisabled = isCurrentUser || isAdminAndNotSuperAdmin;
+                          const title = isCurrentUser
+                            ? "Cannot delete your own account"
+                            : isAdminAndNotSuperAdmin
+                              ? "Only Super Admin can delete admin accounts"
+                              : "Delete User";
+
+                          return (
+                            <button
+                              onClick={() => handleDeleteUser(user._id || user.user_id, user.role)}
+                              className={`p-2.5 rounded-lg transition-colors ${
+                                isDisabled
+                                  ? 'text-gray-400 cursor-not-allowed opacity-50'
+                                  : 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
+                              }`}
+                              title={title}
+                              disabled={isDisabled}
+                            >
+                              <TrashIcon className="w-5 h-5" />
+                            </button>
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>

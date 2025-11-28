@@ -44,8 +44,13 @@ const Login = () => {
       await login(credentials);
       // Navigation handled in AuthContext
     } catch (error) {
+      // Error toast is already shown by AuthContext.login
+      // Set form field error to show the message under the password field
       if (error.response?.status === 401) {
-        setError('password', { message: 'Invalid credentials' });
+        const errorMessage = error.response?.data?.message ||
+                            error.response?.data?.error?.message ||
+                            'Incorrect email/phone or password';
+        setError('password', { message: errorMessage });
       }
     } finally {
       setLoading(false);

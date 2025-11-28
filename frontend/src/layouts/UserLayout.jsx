@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -13,16 +13,41 @@ import {
   XMarkIcon,
   ArrowRightOnRectangleIcon,
   MoonIcon,
-  SunIcon
+  SunIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
+import subscriptionService from '../services/subscriptionService';
 
 const UserLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState({ status: 'loading', hasSubscription: false });
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+
+  // Fetch subscription status
+  useEffect(() => {
+    const fetchSubscriptionStatus = async () => {
+      try {
+        const response = await subscriptionService.getActiveSubscription();
+        const subscription = response.data;
+        if (subscription && (subscription.subscription_id || subscription._id)) {
+          setSubscriptionStatus({ status: subscription.status || 'active', hasSubscription: true });
+        } else {
+          setSubscriptionStatus({ status: 'none', hasSubscription: false });
+        }
+      } catch (error) {
+        console.error('Failed to fetch subscription status:', error);
+        setSubscriptionStatus({ status: 'none', hasSubscription: false });
+      }
+    };
+
+    if (user) {
+      fetchSubscriptionStatus();
+    }
+  }, [user]);
 
   const navigation = [
     { name: 'Dashboard', href: '/user/dashboard', icon: HomeIcon },
@@ -31,7 +56,7 @@ const UserLayout = () => {
     { name: 'Weekly Menu', href: '/user/menu', icon: CalendarDaysIcon },
     { name: 'QR Scanner', href: '/user/scan', icon: QrCodeIcon },
     { name: 'Notifications', href: '/user/notifications', icon: BellIcon },
-    { name: 'Settings', href: '/user/settings', icon: Cog6ToothIcon },
+    // { name: 'Settings', href: '/user/settings', icon: Cog6ToothIcon },
   ];
 
   const handleLogout = async () => {
@@ -78,7 +103,7 @@ const UserLayout = () => {
                   <XMarkIcon className="h-6 w-6 dark:text-gray-400" />
                 </button>
               </div>
-              <SidebarContent navigation={navigation} user={user} />
+              <SidebarContent navigation={navigation} user={user} subscriptionStatus={subscriptionStatus} />
             </motion.div>
           </>
         )}
@@ -95,7 +120,7 @@ const UserLayout = () => {
               Hostel Eats
             </span>
           </div>
-          <SidebarContent navigation={navigation} user={user} />
+          <SidebarContent navigation={navigation} user={user} subscriptionStatus={subscriptionStatus} />
         </div>
       </div>
 
@@ -198,7 +223,32 @@ const UserLayout = () => {
   );
 };
 
-const SidebarContent = ({ navigation, user }) => {
+const SidebarContent = ({ navigation, user, subscriptionStatus }) => {
+  const getStatusDisplay = () => {
+    if (subscriptionStatus.status === 'loading') {
+      return { text: 'Loading...', bgClass: 'from-gray-400 to-gray-500' };
+    }
+    if (!subscriptionStatus.hasSubscription || subscriptionStatus.status === 'none') {
+      return { text: 'No Subscription', bgClass: 'from-red-500 to-red-600' };
+    }
+    switch (subscriptionStatus.status) {
+      case 'active':
+        return { text: 'Active', bgClass: 'from-primary-500 to-primary-600' };
+      case 'expired':
+        return { text: 'Expired', bgClass: 'from-red-500 to-red-600' };
+      case 'pending':
+        return { text: 'Pending', bgClass: 'from-yellow-500 to-yellow-600' };
+      case 'paused':
+        return { text: 'Paused', bgClass: 'from-orange-500 to-orange-600' };
+      case 'cancelled':
+        return { text: 'Cancelled', bgClass: 'from-gray-500 to-gray-600' };
+      default:
+        return { text: subscriptionStatus.status, bgClass: 'from-gray-500 to-gray-600' };
+    }
+  };
+
+  const statusDisplay = getStatusDisplay();
+
   return (
     <>
       {/* User Info Section */}
@@ -214,7 +264,7 @@ const SidebarContent = ({ navigation, user }) => {
               {user?.full_name || 'User'}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              {user?.role === 'user' ? 'Student' : user?.role}
+              {user?.role === 'subscriber' ? 'Student' : user?.role}
             </p>
           </div>
         </div>
@@ -240,17 +290,23 @@ const SidebarContent = ({ navigation, user }) => {
         ))}
       </nav>
 
-      {/* Quick Stats */}
+      {/* Quick Stats - Subscription Status */}
       <div className="p-4 border-t dark:border-dark-border">
-        <div className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg p-3 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium opacity-90">Subscription Status</p>
-              <p className="text-sm font-semibold">Active</p>
+        <NavLink to="/user/subscription">
+          <div className={`bg-gradient-to-r ${statusDisplay.bgClass} rounded-lg p-3 text-white hover:opacity-90 transition-opacity`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium opacity-90">Subscription Status</p>
+                <p className="text-sm font-semibold">{statusDisplay.text}</p>
+              </div>
+              {subscriptionStatus.hasSubscription ? (
+                <CreditCardIcon className="h-5 w-5 opacity-80" />
+              ) : (
+                <ExclamationTriangleIcon className="h-5 w-5 opacity-80" />
+              )}
             </div>
-            <CreditCardIcon className="h-5 w-5 opacity-80" />
           </div>
-        </div>
+        </NavLink>
       </div>
     </>
   );

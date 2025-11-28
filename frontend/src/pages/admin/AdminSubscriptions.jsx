@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   FiPlus, FiEdit2, FiTrash2, FiSearch, FiFilter,
   FiDownload, FiRefreshCw, FiX, FiCalendar, FiUsers,
   FiCreditCard, FiTrendingUp, FiCheckCircle, FiXCircle
@@ -7,6 +7,7 @@ import {
 import { MdSubscriptions, MdCancel, MdAutorenew } from 'react-icons/md';
 import subscriptionService from '../../services/subscriptionService';
 import messService from '../../services/messService';
+import userService from '../../services/userService';
 import { toast } from 'react-hot-toast';
 
 const AdminSubscriptions = () => {
@@ -26,14 +27,20 @@ const AdminSubscriptions = () => {
   const [subscriptionPlans, setSubscriptionPlans] = useState([]);
   const [analytics, setAnalytics] = useState({});
   const [messes, setMesses] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   const [newSubscription, setNewSubscription] = useState({
+    user_id: '',
     mess_id: '',
-    plan_id: '',
+    plan_type: 'monthly',
     sub_type: 'both',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
-    status: 'active'
+    amount: 3000,
+    status: 'active',
+    payment_status: 'paid',
+    payment_method: 'cash'
   });
 
   useEffect(() => {
@@ -50,13 +57,18 @@ const AdminSubscriptions = () => {
         page: currentPage,
         search: searchTerm,
         status: filterStatus !== 'all' ? filterStatus : undefined,
-        plan: filterPlan !== 'all' ? filterPlan : undefined,
+        plan_type: filterPlan !== 'all' ? filterPlan : undefined,
         mess_id: filterMess !== 'all' ? filterMess : undefined,
         expiring_soon: filterExpiringSoon ? 'true' : undefined
       });
-      setSubscriptions(response.data.subscriptions);
-      setTotalPages(response.data.pagination.pages);
+      console.log('Subscriptions response:', response); // Debug log
+      // Handle response - axios interceptor unwraps response.data, so response is { success, data: {...} }
+      const subscriptionsData = response?.data?.subscriptions || response?.subscriptions || [];
+      const paginationData = response?.data?.pagination || response?.pagination || { pages: 1 };
+      setSubscriptions(subscriptionsData);
+      setTotalPages(paginationData.pages || 1);
     } catch (error) {
+      console.error('Failed to fetch subscriptions:', error);
       toast.error('Failed to fetch subscriptions');
     } finally {
       setLoading(false);
@@ -75,9 +87,16 @@ const AdminSubscriptions = () => {
   const fetchAnalytics = async () => {
     try {
       const response = await subscriptionService.getSubscriptionAnalytics();
-      setAnalytics(response.data);
+      console.log('Analytics response:', response); // Debug log
+      // Handle the response - check if data exists
+      if (response && response.data) {
+        setAnalytics(response.data);
+      } else if (response) {
+        // If response is already the data object (no nested data)
+        setAnalytics(response);
+      }
     } catch (error) {
-      console.error('Failed to fetch analytics');
+      console.error('Failed to fetch analytics:', error);
     }
   };
 
@@ -113,30 +132,68 @@ const AdminSubscriptions = () => {
     );
   };
 
-  const handleMessChange = (messId) => {
+  const handleMessChange = async (messId) => {
     setNewSubscription({
       ...newSubscription,
-      mess_id: messId
+      mess_id: messId,
+      user_id: '' // Reset user selection when mess changes
     });
+    setUsers([]); // Clear previous users
+
+    if (messId) {
+      setLoadingUsers(true);
+      try {
+        const response = await userService.getAllUsers({ mess_id: messId, role: 'subscriber', status: 'active' });
+        const usersData = response.data?.users || response.data || [];
+        setUsers(Array.isArray(usersData) ? usersData : []);
+      } catch (error) {
+        console.error('Failed to fetch users for mess:', error);
+        toast.error('Failed to load users for selected mess');
+        setUsers([]);
+      } finally {
+        setLoadingUsers(false);
+      }
+    }
   };
 
   const handleCreateSubscription = async (e) => {
     e.preventDefault();
+
+    // Validate required fields
+    if (!newSubscription.user_id) {
+      toast.error('Please select a user');
+      return;
+    }
+    if (!newSubscription.mess_id) {
+      toast.error('Please select a mess');
+      return;
+    }
+    if (!newSubscription.end_date) {
+      toast.error('Please select an end date');
+      return;
+    }
+
     try {
       await subscriptionService.createSubscription(newSubscription);
       toast.success('Subscription created successfully');
       setShowCreateModal(false);
       setNewSubscription({
+        user_id: '',
         mess_id: '',
-        plan_id: '',
+        plan_type: 'monthly',
         sub_type: 'both',
         start_date: new Date().toISOString().split('T')[0],
         end_date: '',
-        status: 'active'
+        amount: 3000,
+        status: 'active',
+        payment_status: 'paid',
+        payment_method: 'cash'
       });
+      setUsers([]); // Clear users list
       fetchSubscriptions();
     } catch (error) {
-      toast.error('Failed to create subscription');
+      const message = error.response?.data?.message || 'Failed to create subscription';
+      toast.error(message);
     }
   };
 
@@ -326,25 +383,55 @@ const AdminSubscriptions = () => {
 
         {/* Filters and Search */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-            <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
-              {/* Search */}
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search subscriptions..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
-                />
-                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              </div>
+          {/* Search and Bulk Actions Row */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+            {/* Search */}
+            <div className="relative flex-1 max-w-md">
+              <input
+                type="text"
+                placeholder="Search subscriptions..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+              />
+              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            </div>
 
-              {/* Status Filter */}
+            {/* Bulk Actions */}
+            {selectedSubscriptions.length > 0 && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                  {selectedSubscriptions.length} selected
+                </span>
+                <button
+                  onClick={() => handleBulkAction('renew')}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium flex items-center gap-2"
+                >
+                  <MdAutorenew className="w-4 h-4" />
+                  Bulk Renew
+                </button>
+                <button
+                  onClick={() => handleBulkAction('cancel')}
+                  className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium flex items-center gap-2"
+                >
+                  <MdCancel className="w-4 h-4" />
+                  Bulk Cancel
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Filters Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Status Filter */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Status
+              </label>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
@@ -352,26 +439,36 @@ const AdminSubscriptions = () => {
                 <option value="cancelled">Cancelled</option>
                 <option value="suspended">Suspended</option>
               </select>
+            </div>
 
-              {/* Plan Filter */}
+            {/* Plan Filter */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Plan Type
+              </label>
               <select
                 value={filterPlan}
                 onChange={(e) => setFilterPlan(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
               >
                 <option value="all">All Plans</option>
-                {subscriptionPlans.map(plan => (
-                  <option key={plan.plan_id} value={plan.plan_id}>
-                    {plan.plan_name}
-                  </option>
-                ))}
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="yearly">Yearly</option>
               </select>
+            </div>
 
-              {/* Mess Filter */}
+            {/* Mess Filter */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Mess Outlet
+              </label>
               <select
                 value={filterMess}
                 onChange={(e) => setFilterMess(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
               >
                 <option value="all">All Mess Outlets</option>
                 {Array.isArray(messes) && messes.map(mess => {
@@ -383,43 +480,27 @@ const AdminSubscriptions = () => {
                   );
                 })}
               </select>
+            </div>
 
-              {/* Expiring Soon Filter */}
+            {/* Expiring Soon Filter */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Quick Filter
+              </label>
               <button
                 onClick={() => setFilterExpiringSoon(!filterExpiringSoon)}
-                className={`px-4 py-2 border rounded-lg transition-colors ${
+                className={`w-full px-4 py-2 border rounded-lg transition-colors font-medium text-sm ${
                   filterExpiringSoon
                     ? 'bg-orange-500 text-white border-orange-500'
                     : 'bg-white text-gray-900 border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:hover:bg-gray-700'
                 }`}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center gap-2">
                   <FiCalendar className="w-4 h-4" />
-                  <span>Expiring Soon (2 weeks)</span>
+                  <span className="whitespace-nowrap">Expiring Soon</span>
                 </div>
               </button>
             </div>
-
-            {/* Bulk Actions */}
-            {selectedSubscriptions.length > 0 && (
-              <div className="flex items-center space-x-3">
-                <span className="text-sm text-gray-600">
-                  {selectedSubscriptions.length} selected
-                </span>
-                <button
-                  onClick={() => handleBulkAction('renew')}
-                  className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-                >
-                  Bulk Renew
-                </button>
-                <button
-                  onClick={() => handleBulkAction('cancel')}
-                  className="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
-                >
-                  Bulk Cancel
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
@@ -489,15 +570,15 @@ const AdminSubscriptions = () => {
                             <FiUsers className="w-5 h-5 text-primary-600" />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">{subscription.user?.full_name}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{subscription.user?.email}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{subscription.user_id?.full_name || subscription.user?.full_name || 'N/A'}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{subscription.user_id?.email || subscription.user?.email || ''}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm">
-                          <p className="text-gray-900 dark:text-white">{subscription.plan?.plan_name}</p>
-                          <p className="text-gray-500 dark:text-gray-400">{subscription.plan?.meal_types?.join(', ')}</p>
+                          <p className="text-gray-900 dark:text-white capitalize">{subscription.plan_type || subscription.plan?.plan_name || 'N/A'}</p>
+                          <p className="text-gray-500 dark:text-gray-400 capitalize">{subscription.sub_type || ''}</p>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -592,12 +673,27 @@ const AdminSubscriptions = () => {
 
       {/* Create Subscription Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg w-full max-w-lg mx-4 my-8">
             <div className="flex items-center justify-between p-6 border-b dark:border-gray-600">
               <h2 className="text-lg font-semibold dark:text-white">Create New Subscription</h2>
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setUsers([]);
+                  setNewSubscription({
+                    user_id: '',
+                    mess_id: '',
+                    plan_type: 'monthly',
+                    sub_type: 'both',
+                    start_date: new Date().toISOString().split('T')[0],
+                    end_date: '',
+                    amount: 3000,
+                    status: 'active',
+                    payment_status: 'paid',
+                    payment_method: 'cash'
+                  });
+                }}
                 className="text-gray-400 hover:text-gray-600 dark:text-gray-300 dark:hover:text-gray-100"
               >
                 <FiX className="w-6 h-6" />
@@ -605,9 +701,10 @@ const AdminSubscriptions = () => {
             </div>
             <form onSubmit={handleCreateSubscription} className="p-6">
               <div className="space-y-4">
+                {/* Step 1: Select Mess */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                    Select Mess *
+                    Select Mess <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={newSubscription.mess_id}
@@ -625,30 +722,96 @@ const AdminSubscriptions = () => {
                       );
                     })}
                   </select>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    First select the mess to load its users
-                  </p>
                 </div>
 
+                {/* Step 2: Select User (only shown after mess is selected) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                    Plan
+                    Select User <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={newSubscription.plan_id}
-                    onChange={(e) => setNewSubscription({...newSubscription, plan_id: e.target.value})}
+                    value={newSubscription.user_id}
+                    onChange={(e) => setNewSubscription({...newSubscription, user_id: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-700"
+                    required
+                    disabled={!newSubscription.mess_id || loadingUsers}
+                  >
+                    <option value="">
+                      {!newSubscription.mess_id
+                        ? '-- Select mess first --'
+                        : loadingUsers
+                          ? 'Loading users...'
+                          : users.length === 0
+                            ? '-- No users found --'
+                            : '-- Select User --'}
+                    </option>
+                    {users.map(user => {
+                      const userId = user._id || user.id || user.user_id;
+                      return (
+                        <option key={userId} value={userId}>
+                          {user.full_name} ({user.email})
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {newSubscription.mess_id && !loadingUsers && users.length === 0 && (
+                    <p className="text-xs text-orange-500 mt-1">
+                      No subscribers found in this mess. Create a user first.
+                    </p>
+                  )}
+                </div>
+
+                {/* Plan Type */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                    Plan Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newSubscription.plan_type}
+                    onChange={(e) => {
+                      const planType = e.target.value;
+                      let amount = 3000;
+                      let endDate = newSubscription.start_date;
+                      const startDate = new Date(newSubscription.start_date);
+
+                      switch(planType) {
+                        case 'daily':
+                          amount = 100;
+                          endDate = new Date(startDate.setDate(startDate.getDate() + 1)).toISOString().split('T')[0];
+                          break;
+                        case 'weekly':
+                          amount = 700;
+                          endDate = new Date(startDate.setDate(startDate.getDate() + 7)).toISOString().split('T')[0];
+                          break;
+                        case 'monthly':
+                          amount = 3000;
+                          endDate = new Date(startDate.setMonth(startDate.getMonth() + 1)).toISOString().split('T')[0];
+                          break;
+                        case 'quarterly':
+                          amount = 8500;
+                          endDate = new Date(startDate.setMonth(startDate.getMonth() + 3)).toISOString().split('T')[0];
+                          break;
+                        case 'yearly':
+                          amount = 30000;
+                          endDate = new Date(startDate.setFullYear(startDate.getFullYear() + 1)).toISOString().split('T')[0];
+                          break;
+                        default:
+                          amount = 3000;
+                      }
+                      setNewSubscription({...newSubscription, plan_type: planType, amount, end_date: endDate});
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
                     required
                   >
-                    <option value="">Select Plan</option>
-                    {subscriptionPlans.map(plan => (
-                      <option key={plan.plan_id} value={plan.plan_id}>
-                        {plan.plan_name} - ₹{plan.price}
-                      </option>
-                    ))}
+                    <option value="daily">Daily - ₹100</option>
+                    <option value="weekly">Weekly - ₹700</option>
+                    <option value="monthly">Monthly - ₹3,000</option>
+                    <option value="quarterly">Quarterly - ₹8,500</option>
+                    <option value="yearly">Yearly - ₹30,000</option>
                   </select>
                 </div>
 
+                {/* Food Preference */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                     Food Preference
@@ -663,49 +826,115 @@ const AdminSubscriptions = () => {
                     <option value="non-veg">Non-Vegetarian</option>
                     <option value="both">Both</option>
                   </select>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Helps plan meals according to dietary preferences
+                </div>
+
+                {/* Date Row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                      Start Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={newSubscription.start_date}
+                      onChange={(e) => setNewSubscription({...newSubscription, start_date: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                      End Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={newSubscription.end_date}
+                      onChange={(e) => setNewSubscription({...newSubscription, end_date: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Amount */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                    Amount (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={newSubscription.amount}
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300 cursor-not-allowed"
+                    min="0"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Amount is auto-calculated based on plan type
                   </p>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                    Start Date
-                  </label>
-                  <input
-                    type="date"
-                    value={newSubscription.start_date}
-                    onChange={(e) => setNewSubscription({...newSubscription, start_date: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                    End Date
-                  </label>
-                  <input
-                    type="date"
-                    value={newSubscription.end_date}
-                    onChange={(e) => setNewSubscription({...newSubscription, end_date: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-                    required
-                  />
+                {/* Payment Row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                      Payment Status
+                    </label>
+                    <select
+                      value={newSubscription.payment_status}
+                      onChange={(e) => setNewSubscription({...newSubscription, payment_status: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                    >
+                      <option value="paid">Paid</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                      Payment Method
+                    </label>
+                    <select
+                      value={newSubscription.payment_method}
+                      onChange={(e) => setNewSubscription({...newSubscription, payment_method: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="upi">UPI</option>
+                      <option value="card">Card</option>
+                      <option value="netbanking">Net Banking</option>
+                      <option value="wallet">Wallet</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               <div className="flex space-x-3 mt-6">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setUsers([]);
+                    setNewSubscription({
+                      user_id: '',
+                      mess_id: '',
+                      plan_type: 'monthly',
+                      sub_type: 'both',
+                      start_date: new Date().toISOString().split('T')[0],
+                      end_date: '',
+                      amount: 3000,
+                      status: 'active',
+                      payment_status: 'paid',
+                      payment_method: 'cash'
+                    });
+                  }}
                   className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-gray-900 dark:text-white dark:bg-gray-800"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+                  disabled={!newSubscription.user_id || !newSubscription.mess_id}
+                  className="flex-1 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Create
+                  Create Subscription
                 </button>
               </div>
             </form>

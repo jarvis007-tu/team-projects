@@ -496,7 +496,7 @@ class AuthController {
   async updateProfile(req, res, next) {
     try {
       const userId = req.user.user_id;
-      const { full_name, phone, preferences } = req.body;
+      const { full_name, phone, preferences, profile_image } = req.body;
 
       const user = await User.findById(userId);
       if (!user) {
@@ -507,6 +507,7 @@ class AuthController {
       if (full_name) user.full_name = full_name;
       if (phone) user.phone = phone;
       if (preferences) user.preferences = { ...user.preferences, ...preferences };
+      if (profile_image !== undefined) user.profile_image = profile_image;
 
       await user.save();
 
@@ -581,6 +582,95 @@ class AuthController {
       res.json({
         success: true,
         message: 'Device ID updated successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async uploadProfileImage(req, res, next) {
+    try {
+      const userId = req.user.user_id;
+      const { image } = req.body;
+
+      if (!image) {
+        throw new AppError('Image data is required', 400);
+      }
+
+      // Validate base64 image format
+      const base64Regex = /^data:image\/(jpeg|jpg|png|gif|webp);base64,/;
+      if (!base64Regex.test(image)) {
+        throw new AppError('Invalid image format. Please upload a valid image (JPEG, PNG, GIF, or WebP)', 400);
+      }
+
+      // Check image size (limit to 2MB for base64 - roughly 2.7MB in base64 encoding)
+      const base64Data = image.split(',')[1];
+      const sizeInBytes = Buffer.from(base64Data, 'base64').length;
+      const maxSize = 2 * 1024 * 1024; // 2MB
+
+      if (sizeInBytes > maxSize) {
+        throw new AppError('Image size must be less than 2MB', 400);
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new AppError('User not found', 404);
+      }
+
+      // Store the base64 image data
+      user.profile_image = image;
+      await user.save();
+
+      // Clear cache (if Redis is available)
+      try {
+        if (redisClient && redisClient.isReady) {
+          await redisClient.del(`user:${userId}`);
+        }
+      } catch (cacheError) {
+        logger.debug('Redis cache clear failed during profile image upload:', cacheError.message);
+      }
+
+      logger.info(`Profile image updated for user: ${userId}`);
+
+      res.json({
+        success: true,
+        message: 'Profile image uploaded successfully',
+        data: {
+          profile_image: user.profile_image
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async removeProfileImage(req, res, next) {
+    try {
+      const userId = req.user.user_id;
+
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new AppError('User not found', 404);
+      }
+
+      // Remove the profile image
+      user.profile_image = null;
+      await user.save();
+
+      // Clear cache (if Redis is available)
+      try {
+        if (redisClient && redisClient.isReady) {
+          await redisClient.del(`user:${userId}`);
+        }
+      } catch (cacheError) {
+        logger.debug('Redis cache clear failed during profile image removal:', cacheError.message);
+      }
+
+      logger.info(`Profile image removed for user: ${userId}`);
+
+      res.json({
+        success: true,
+        message: 'Profile image removed successfully'
       });
     } catch (error) {
       next(error);

@@ -21,12 +21,17 @@ const authService = {
   
   // Profile
   getProfile: () => api.get('/auth/profile'),
-  
+
   updateProfile: (profileData) => api.put('/auth/profile', profileData),
-  
+
+  // Profile Image
+  uploadProfileImage: (imageBase64) => api.post('/auth/profile-image', { image: imageBase64 }),
+
+  removeProfileImage: () => api.delete('/auth/profile-image'),
+
   // Verification
   verifyEmail: (token) => api.post('/auth/verify-email', { token }),
-  
+
   resendVerificationEmail: () => api.post('/auth/resend-verification'),
 };
 

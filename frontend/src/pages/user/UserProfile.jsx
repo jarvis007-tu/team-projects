@@ -5,6 +5,7 @@ import * as yup from 'yup';
 import { FiUser, FiMail, FiPhone, FiLock, FiEdit3, FiSave, FiCamera, FiMapPin, FiCalendar } from 'react-icons/fi';
 import { MdVerified, MdSchool } from 'react-icons/md';
 import userService from '../../services/userService';
+import authService from '../../services/authService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
@@ -98,22 +99,44 @@ const UserProfile = () => {
     const file = event.target.files[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image size should be less than 5MB');
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Please upload a valid image (JPEG, PNG, GIF, or WebP)');
       return;
     }
 
-    const formData = new FormData();
-    formData.append('profile_image', file);
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size should be less than 2MB');
+      return;
+    }
 
     setUploadingImage(true);
     try {
-      const response = await userService.uploadProfileImage(formData);
-      setProfileImage(response.data.profile_image);
-      updateUser({ ...user, profile_image: response.data.profile_image });
+      // Convert file to base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Upload to API
+      const response = await authService.uploadProfileImage(base64);
+      const imageData = response.data?.profile_image || base64;
+
+      setProfileImage(imageData);
+      updateUser({ ...user, profile_image: imageData });
+      // Also update localStorage
+      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      localStorage.setItem('user', JSON.stringify({ ...storedUser, profile_image: imageData }));
+
       toast.success('Profile image updated successfully');
     } catch (error) {
-      toast.error('Failed to upload image');
+      const errorMessage = error.response?.data?.message ||
+                          error.response?.data?.error?.message ||
+                          'Failed to upload image';
+      toast.error(errorMessage);
     } finally {
       setUploadingImage(false);
     }

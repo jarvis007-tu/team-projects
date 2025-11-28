@@ -154,28 +154,44 @@ const Profile = () => {
     const file = event.target.files[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image size should be less than 5MB');
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Please upload a valid image (JPEG, PNG, GIF, or WebP)');
       return;
     }
 
-    const formData = new FormData();
-    formData.append('profile_image', file);
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size should be less than 2MB');
+      return;
+    }
 
     setUploadingImage(true);
     try {
-      // Simulated API call - replace with actual service
-      // const response = await userService.uploadProfileImage(formData);
-      
-      // Mock successful image upload
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API delay
-      
-      const mockImageUrl = URL.createObjectURL(file);
-      setProfileImage(mockImageUrl);
-      updateUser({ ...user, profile_image: mockImageUrl });
+      // Convert file to base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Upload to API
+      const response = await authService.uploadProfileImage(base64);
+      const imageData = response.data?.profile_image || base64;
+
+      setProfileImage(imageData);
+      updateUser({ ...user, profile_image: imageData });
+      // Also update localStorage
+      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      localStorage.setItem('user', JSON.stringify({ ...storedUser, profile_image: imageData }));
+
       toast.success('Profile image updated successfully');
     } catch (error) {
-      toast.error('Failed to upload image');
+      const errorMessage = error.response?.data?.message ||
+                          error.response?.data?.error?.message ||
+                          'Failed to upload image';
+      toast.error(errorMessage);
       console.error('Image upload error:', error);
     } finally {
       setUploadingImage(false);

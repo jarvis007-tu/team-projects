@@ -13,6 +13,7 @@ const mealConfirmationRoutes = require('./mealConfirmationRoutes');
 const reportRoutes = require('./reportRoutes');
 const qrRoutes = require('./qrRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
+const biometricRoutes = require('./biometricRoutes');
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -46,6 +47,7 @@ router.use('/meal-confirmations', mealConfirmationRoutes);
 router.use('/reports', reportRoutes);
 router.use('/qr', qrRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/biometric', biometricRoutes);
 
 // 404 handler for undefined routes
 router.use('*', (req, res) => {

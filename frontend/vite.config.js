@@ -18,6 +18,8 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    host: true, // Listen on all network interfaces
+    allowedHosts: ['.trycloudflare.com'], // Allow all cloudflare tunnel subdomains
     proxy: {
       '/api': {
         target: 'http://localhost:5000',

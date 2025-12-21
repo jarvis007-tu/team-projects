@@ -38,28 +38,8 @@ function verifyMessQRCode(qrCodeString) {
   }
 }
 
-// Helper function to determine current meal type (outside class to avoid binding issues)
-function getCurrentMealType() {
-  const now = moment();
-  const hour = now.hour();
-  const minute = now.minute();
-  const currentTime = hour * 60 + minute; // Convert to minutes
-
-  // Breakfast: 7:00 AM - 10:00 AM
-  if (currentTime >= 7 * 60 && currentTime < 10 * 60) {
-    return 'breakfast';
-  }
-  // Lunch: 12:00 PM - 3:00 PM
-  else if (currentTime >= 12 * 60 && currentTime < 15 * 60) {
-    return 'lunch';
-  }
-  // Dinner: 7:00 PM - 10:00 PM
-  else if (currentTime >= 19 * 60 && currentTime < 22 * 60) {
-    return 'dinner';
-  }
-
-  return null;
-}
+// Import shared helper
+const { getCurrentMealType } = require('../utils/messHelpers');
 
 class AttendanceController {
 

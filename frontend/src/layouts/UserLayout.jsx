@@ -14,7 +14,8 @@ import {
   ArrowRightOnRectangleIcon,
   MoonIcon,
   SunIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  FingerPrintIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
@@ -55,6 +56,7 @@ const UserLayout = () => {
     { name: 'Subscription', href: '/user/subscription', icon: CreditCardIcon },
     { name: 'Weekly Menu', href: '/user/menu', icon: CalendarDaysIcon },
     { name: 'QR Scanner', href: '/user/scan', icon: QrCodeIcon },
+    { name: 'Biometric', href: '/user/biometric-attendance', icon: FingerPrintIcon },
     { name: 'Notifications', href: '/user/notifications', icon: BellIcon },
     // { name: 'Settings', href: '/user/settings', icon: Cog6ToothIcon },
   ];
@@ -162,6 +164,15 @@ const UserLayout = () => {
                 title="Scan QR Code"
               >
                 <QrCodeIcon className="h-5 w-5 dark:text-gray-400" />
+              </NavLink>
+
+              {/* Biometric Attendance */}
+              <NavLink
+                to="/user/biometric-attendance"
+                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 relative"
+                title="Biometric Attendance"
+              >
+                <FingerPrintIcon className="h-5 w-5 dark:text-gray-400" />
               </NavLink>
 
               {/* Notifications */}

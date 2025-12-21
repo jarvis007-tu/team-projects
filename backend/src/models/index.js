@@ -12,6 +12,7 @@ const MenuCategory = require('./MenuCategory');
 const MenuTemplate = require('./MenuTemplate');
 const MealConfirmation = require('./MealConfirmation');
 const Notification = require('./Notification');
+const Biometric = require('./Biometric');
 
 // Export all models
 module.exports = {
@@ -25,5 +26,6 @@ module.exports = {
   MenuCategory,
   MenuTemplate,
   MealConfirmation,
-  Notification
+  Notification,
+  Biometric
 };

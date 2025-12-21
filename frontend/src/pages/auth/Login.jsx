@@ -58,9 +58,9 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-900 dark:via-gray-900 dark:to-slate-800 px-4 py-12">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-900 dark:via-gray-900 dark:to-slate-800 px-3 sm:px-4 py-6 sm:py-12">
       <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-teal-600/10 dark:from-blue-900/20 dark:via-purple-900/20 dark:to-teal-900/20"></div>
-      
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -68,22 +68,22 @@ const Login = () => {
         className="relative w-full max-w-md"
       >
         {/* Login Card */}
-        <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-3xl shadow-2xl shadow-blue-500/10 dark:shadow-black/20 border border-white/20 dark:border-slate-700/50 overflow-hidden">
+        <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl shadow-blue-500/10 dark:shadow-black/20 border border-white/20 dark:border-slate-700/50 overflow-hidden">
           {/* Header Section */}
-          <div className="relative px-8 pt-12 pb-8 text-center">
+          <div className="relative px-5 sm:px-8 pt-8 sm:pt-12 pb-6 sm:pb-8 text-center">
             {/* Background decoration */}
-            <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-teal-500/10 dark:from-blue-600/20 dark:via-purple-600/20 dark:to-teal-600/20"></div>
-            
+            <div className="absolute top-0 left-0 w-full h-24 sm:h-32 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-teal-500/10 dark:from-blue-600/20 dark:via-purple-600/20 dark:to-teal-600/20"></div>
+
             {/* Logo */}
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2, duration: 0.5, type: "spring", stiffness: 200 }}
-              className="relative inline-flex items-center justify-center w-20 h-20 mb-6"
+              className="relative inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 mb-4 sm:mb-6"
             >
               <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-teal-500 rounded-full shadow-lg"></div>
               <div className="absolute inset-0.5 bg-gradient-to-br from-blue-400 to-teal-400 rounded-full"></div>
-              <span className="relative text-white text-2xl font-bold tracking-wider">HE</span>
+              <span className="relative text-white text-xl sm:text-2xl font-bold tracking-wider">HE</span>
             </motion.div>
 
             {/* Title */}
@@ -91,7 +91,7 @@ const Login = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.6 }}
-              className="text-2xl font-bold text-gray-900 dark:text-white mb-2"
+              className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-1 sm:mb-2"
             >
               Welcome Back
             </motion.h1>
@@ -99,7 +99,7 @@ const Login = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4, duration: 0.6 }}
-              className="text-gray-600 dark:text-gray-400 text-sm"
+              className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm"
             >
               Sign in to your Hostel Eats account
             </motion.p>
@@ -110,7 +110,7 @@ const Login = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.6 }}
-            className="px-8 pb-8"
+            className="px-5 sm:px-8 pb-6 sm:pb-8"
           >
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               {/* Email/Phone Input */}

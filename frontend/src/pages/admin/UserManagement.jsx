@@ -624,37 +624,38 @@ const UserManagement = () => {
   }, [showAddModal, showEditModal, formData, messes, isSuperAdmin, handleInputChange, handleCreateUser, handleUpdateUser, resetForm]);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-3 sm:p-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-            <UserIcon className="w-8 h-8 text-blue-600" />
+          <h1 className="text-xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2 sm:gap-3">
+            <UserIcon className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
             User Management
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">Manage users and their access</p>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1 sm:mt-2">Manage users and their access</p>
         </div>
         <button
           onClick={openAddModal}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-500/30 transition-all duration-200 font-medium"
+          className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-500/30 transition-all duration-200 font-medium text-sm sm:text-base"
         >
-          <UserPlusIcon className="w-5 h-5" />
-          Add New User
+          <UserPlusIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="hidden sm:inline">Add New User</span>
+          <span className="sm:hidden">Add User</span>
         </button>
       </div>
 
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-6 mb-4 sm:mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
           {/* Search */}
-          <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <div className="relative col-span-2 sm:col-span-1">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search users..."
+              placeholder="Search..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+              className="pl-9 sm:pl-10 w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
             />
           </div>
 
@@ -662,7 +663,7 @@ const UserManagement = () => {
           <select
             value={filterRole}
             onChange={(e) => setFilterRole(e.target.value)}
-            className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white"
+            className="px-2 sm:px-4 py-2 sm:py-3 text-sm sm:text-base bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white"
           >
             <option value="all">All Roles</option>
             <option value="super_admin">Super Admin</option>
@@ -674,11 +675,11 @@ const UserManagement = () => {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white"
+            className="px-2 sm:px-4 py-2 sm:py-3 text-sm sm:text-base bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white"
           >
-            <option value="all">All Account Status</option>
-            <option value="active">Active Account</option>
-            <option value="inactive">Inactive Account</option>
+            <option value="all">Account Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
             <option value="suspended">Suspended</option>
             <option value="blocked">Blocked</option>
           </select>
@@ -687,11 +688,11 @@ const UserManagement = () => {
           <select
             value={filterSubscriptionStatus}
             onChange={(e) => setFilterSubscriptionStatus(e.target.value)}
-            className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white"
+            className="px-2 sm:px-4 py-2 sm:py-3 text-sm sm:text-base bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white"
           >
-            <option value="all">All Subscription Status</option>
-            <option value="subscribed">Active Subscription</option>
-            <option value="not_subscribed">No Active Subscription</option>
+            <option value="all">Subscription</option>
+            <option value="subscribed">Subscribed</option>
+            <option value="not_subscribed">Not Subscribed</option>
           </select>
 
           {/* Mess Filter - Super Admin Only */}
@@ -699,7 +700,7 @@ const UserManagement = () => {
             <select
               value={filterMess}
               onChange={(e) => setFilterMess(e.target.value)}
-              className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white"
+              className="px-2 sm:px-4 py-2 sm:py-3 text-sm sm:text-base bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white"
             >
               <option value="all">All Messes</option>
               {messes.map((mess) => (
@@ -712,154 +713,224 @@ const UserManagement = () => {
         </div>
       </div>
 
-      {/* Users Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
+      {/* Users Table/Cards */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-lg overflow-hidden">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="mt-4 text-gray-600 dark:text-gray-400 font-medium">Loading users...</p>
+          <div className="flex flex-col items-center justify-center py-12 sm:py-20">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="mt-4 text-sm sm:text-base text-gray-600 dark:text-gray-400 font-medium">Loading users...</p>
           </div>
         ) : users.length === 0 ? (
-          <div className="p-12 text-center">
-            <UserIcon className="w-20 h-20 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No Users Found</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">Get started by adding your first user</p>
+          <div className="p-8 sm:p-12 text-center">
+            <UserIcon className="w-16 h-16 sm:w-20 sm:h-20 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-2">No Users Found</h3>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-6">Get started by adding your first user</p>
             <button
               onClick={openAddModal}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
-              <UserPlusIcon className="w-5 h-5" />
+              <UserPlusIcon className="w-4 h-4 sm:w-5 sm:h-5" />
               Add First User
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-900">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">User</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Contact</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Mess</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Account</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Subscription</th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {users.map((user) => (
-                  <tr key={user._id || user.user_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
-                          {user.full_name?.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-gray-900 dark:text-white">{user.full_name}</p>
-                        </div>
+          <>
+            {/* Mobile Card View */}
+            <div className="block sm:hidden divide-y divide-gray-200 dark:divide-gray-700">
+              {users.map((user) => (
+                <div key={user._id || user.user_id} className="p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                        {user.full_name?.charAt(0).toUpperCase()}
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="space-y-1">
-                        <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                          <EnvelopeIcon className="w-4 h-4" />
-                          {user.email}
-                        </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                          <PhoneIcon className="w-4 h-4" />
-                          {user.phone}
-                        </p>
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white text-sm">{user.full_name}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{user.mess_id?.name || 'N/A'}</p>
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <BuildingOfficeIcon className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm text-gray-900 dark:text-white">
-                          {user.mess_id?.name || 'N/A'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getRoleBadge(user.role)}`}>
-                        {user.role?.replace('_', ' ').toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusBadge(user.status)}`}>
-                        {user.status?.toUpperCase() || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => openEditModal(user)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                      >
+                        <PencilSquareIcon className="w-4 h-4" />
+                      </button>
                       {(() => {
-                        const subStatus = getSubscriptionStatus(user);
+                        const isCurrentUser = (currentUser?._id || currentUser?.user_id) === (user._id || user.user_id);
+                        const isAdminAndNotSuperAdmin = !isSuperAdmin && (user.role === 'mess_admin' || user.role === 'super_admin');
+                        const isDisabled = isCurrentUser || isAdminAndNotSuperAdmin;
                         return (
-                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusBadge(subStatus.status)}`}>
-                            {subStatus.label}
-                          </span>
+                          <button
+                            onClick={() => handleDeleteUser(user._id || user.user_id, user.role)}
+                            className={`p-2 rounded-lg transition-colors ${isDisabled ? 'text-gray-400 cursor-not-allowed opacity-50' : 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'}`}
+                            disabled={isDisabled}
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
                         );
                       })()}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => openEditModal(user)}
-                          className="p-2.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                          title="Edit User"
-                        >
-                          <PencilSquareIcon className="w-5 h-5" />
-                        </button>
-                        {(() => {
-                          const isCurrentUser = (currentUser?._id || currentUser?.user_id) === (user._id || user.user_id);
-                          const isAdminAndNotSuperAdmin = !isSuperAdmin && (user.role === 'mess_admin' || user.role === 'super_admin');
-                          const isDisabled = isCurrentUser || isAdminAndNotSuperAdmin;
-                          const title = isCurrentUser
-                            ? "Cannot delete your own account"
-                            : isAdminAndNotSuperAdmin
-                              ? "Only Super Admin can delete admin accounts"
-                              : "Delete User";
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    <p className="text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                      <EnvelopeIcon className="w-3.5 h-3.5" />
+                      {user.email}
+                    </p>
+                    <p className="text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                      <PhoneIcon className="w-3.5 h-3.5" />
+                      {user.phone}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${getRoleBadge(user.role)}`}>
+                      {user.role?.replace('_', ' ').toUpperCase()}
+                    </span>
+                    <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusBadge(user.status)}`}>
+                      {user.status?.toUpperCase() || 'N/A'}
+                    </span>
+                    {(() => {
+                      const subStatus = getSubscriptionStatus(user);
+                      return (
+                        <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusBadge(subStatus.status)}`}>
+                          {subStatus.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+              ))}
+            </div>
 
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 dark:bg-gray-900">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Contact</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Mess</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Role</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Account</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Subscription</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {users.map((user) => (
+                    <tr key={user._id || user.user_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
+                            {user.full_name?.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900 dark:text-white">{user.full_name}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                            <EnvelopeIcon className="w-4 h-4" />
+                            {user.email}
+                          </p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                            <PhoneIcon className="w-4 h-4" />
+                            {user.phone}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <BuildingOfficeIcon className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm text-gray-900 dark:text-white">
+                            {user.mess_id?.name || 'N/A'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getRoleBadge(user.role)}`}>
+                          {user.role?.replace('_', ' ').toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusBadge(user.status)}`}>
+                          {user.status?.toUpperCase() || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {(() => {
+                          const subStatus = getSubscriptionStatus(user);
                           return (
-                            <button
-                              onClick={() => handleDeleteUser(user._id || user.user_id, user.role)}
-                              className={`p-2.5 rounded-lg transition-colors ${
-                                isDisabled
-                                  ? 'text-gray-400 cursor-not-allowed opacity-50'
-                                  : 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
-                              }`}
-                              title={title}
-                              disabled={isDisabled}
-                            >
-                              <TrashIcon className="w-5 h-5" />
-                            </button>
+                            <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getStatusBadge(subStatus.status)}`}>
+                              {subStatus.label}
+                            </span>
                           );
                         })()}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => openEditModal(user)}
+                            className="p-2.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                            title="Edit User"
+                          >
+                            <PencilSquareIcon className="w-5 h-5" />
+                          </button>
+                          {(() => {
+                            const isCurrentUser = (currentUser?._id || currentUser?.user_id) === (user._id || user.user_id);
+                            const isAdminAndNotSuperAdmin = !isSuperAdmin && (user.role === 'mess_admin' || user.role === 'super_admin');
+                            const isDisabled = isCurrentUser || isAdminAndNotSuperAdmin;
+                            const title = isCurrentUser
+                              ? "Cannot delete your own account"
+                              : isAdminAndNotSuperAdmin
+                                ? "Only Super Admin can delete admin accounts"
+                                : "Delete User";
+
+                            return (
+                              <button
+                                onClick={() => handleDeleteUser(user._id || user.user_id, user.role)}
+                                className={`p-2.5 rounded-lg transition-colors ${
+                                  isDisabled
+                                    ? 'text-gray-400 cursor-not-allowed opacity-50'
+                                    : 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
+                                }`}
+                                title={title}
+                                disabled={isDisabled}
+                              >
+                                <TrashIcon className="w-5 h-5" />
+                              </button>
+                            );
+                          })()}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
               Page {currentPage} of {totalPages}
             </p>
             <div className="flex gap-2">
               <button
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white transition-colors"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white transition-colors"
               >
-                Previous
+                Prev
               </button>
               <button
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white transition-colors"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white transition-colors"
               >
                 Next
               </button>

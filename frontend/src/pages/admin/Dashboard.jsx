@@ -169,31 +169,31 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
       {/* Header Section */}
-      <div className="px-6 py-8">
+      <div className="px-3 sm:px-6 py-4 sm:py-8">
         <div className="max-w-7xl mx-auto">
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
             {/* Overview Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 sm:p-6"
             >
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg">
-                  <ArrowTrendingUpIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4">
+                <div className="bg-blue-50 dark:bg-blue-900/30 p-2 sm:p-3 rounded-lg">
+                  <ArrowTrendingUpIcon className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 dark:text-blue-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Overview</h3>
+                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 dark:text-white">Overview</h3>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Active Subscriptions</span>
-                  <span className="font-semibold text-gray-900 dark:text-white">{overviewStats.activeSubscriptions}</span>
+                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Active Subs</span>
+                  <span className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">{overviewStats.activeSubscriptions}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Monthly Revenue</span>
-                  <span className="font-semibold text-gray-900 dark:text-white">₹{overviewStats.monthlyRevenue}</span>
+                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Revenue</span>
+                  <span className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">₹{overviewStats.monthlyRevenue}</span>
                 </div>
               </div>
             </motion.div>
@@ -205,42 +205,42 @@ const Dashboard = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: (index + 2) * 0.1 }}
-                className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
+                className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 sm:p-6"
               >
-                <div className="flex items-center justify-between mb-4">
-                  <div className={`${stat.bgColor} p-3 rounded-lg`}>
-                    <stat.icon className={`h-6 w-6 ${stat.iconColor}`} />
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                  <div className={`${stat.bgColor} p-2 sm:p-3 rounded-lg`}>
+                    <stat.icon className={`h-5 w-5 sm:h-6 sm:w-6 ${stat.iconColor}`} />
                   </div>
-                  <div className={`flex items-center text-sm font-medium ${stat.changeColor}`}>
+                  <div className={`flex items-center text-xs sm:text-sm font-medium ${stat.changeColor}`}>
                     {stat.trend === 'up' ? (
-                      <ArrowUpIcon className="h-4 w-4 mr-1" />
+                      <ArrowUpIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     ) : (
-                      <ArrowDownIcon className="h-4 w-4 mr-1" />
+                      <ArrowDownIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     )}
                     {stat.change}
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+                  <h3 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white mb-1">
                     {stat.value}
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{stat.title}</p>
+                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{stat.title}</p>
                 </div>
               </motion.div>
             ))}
           </div>
 
           {/* Main Content Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
             {/* Recent Activity */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6 }}
-              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-6"
             >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
                 <button
                   onClick={() => navigate('/admin/attendance')}
                   className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors"
@@ -284,10 +284,10 @@ const Dashboard = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.7 }}
-              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-6"
             >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Attendance Records</h3>
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Attendance Records</h3>
                 <button
                   onClick={() => navigate('/admin/attendance')}
                   className="text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -347,10 +347,10 @@ const Dashboard = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.8 }}
-              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-6"
             >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Dashboard Analytics</h3>
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Analytics</h3>
                 <ChartBarIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />
               </div>
               

@@ -275,63 +275,63 @@ const AdminAttendance = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
       {/* Header */}
-      <div className="bg-white dark:bg-gray-800 shadow-sm px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="bg-white dark:bg-gray-800 shadow-sm px-3 sm:px-6 py-3 sm:py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Attendance Management</h1>
-            <p className="text-gray-600 dark:text-gray-300">Track and manage daily meal attendance</p>
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">Attendance Management</h1>
+            <p className="text-xs sm:text-base text-gray-600 dark:text-gray-300">Track and manage daily meal attendance</p>
           </div>
-          <div className="flex space-x-3">
+          <div className="flex flex-wrap gap-2 sm:space-x-3 sm:gap-0">
             <button
               onClick={handleExportReport}
-              className="flex items-center px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-gray-900 dark:text-white"
+              className="flex items-center px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-gray-900 dark:text-white"
             >
-              <FiDownload className="w-4 h-4 mr-2" />
-              Export Report
+              <FiDownload className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Export</span>
             </button>
             <button
               onClick={() => setShowBulkMarkModal(true)}
-              className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              className="flex items-center px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
             >
-              <FiUsers className="w-4 h-4 mr-2" />
-              Bulk Mark
+              <FiUsers className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Bulk</span>
             </button>
             <button
               onClick={() => setShowMarkModal(true)}
-              className="flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+              className="flex items-center px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
             >
-              <FiPlus className="w-4 h-4 mr-2" />
-              Mark Attendance
+              <FiPlus className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Mark</span>
             </button>
           </div>
         </div>
       </div>
 
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-4 sm:mb-6">
           {statsCards.map((stat, index) => (
-            <div key={index} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className={`w-12 h-12 bg-${stat.color}-100 rounded-lg flex items-center justify-center`}>
-                  <stat.icon className={`w-6 h-6 text-${stat.color}-600`} />
+            <div key={index} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-3 sm:p-6">
+              <div className="flex items-center justify-between mb-2 sm:mb-4">
+                <div className={`w-8 h-8 sm:w-12 sm:h-12 bg-${stat.color}-100 rounded-lg flex items-center justify-center`}>
+                  <stat.icon className={`w-4 h-4 sm:w-6 sm:h-6 text-${stat.color}-600`} />
                 </div>
-                <span className="text-sm font-medium text-green-600">
+                <span className="text-xs sm:text-sm font-medium text-green-600">
                   {stat.change}
                 </span>
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</h3>
-              <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">{stat.title}</p>
+              <h3 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</h3>
+              <p className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm mt-1">{stat.title}</p>
             </div>
           ))}
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
           {/* Attendance Trends */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Weekly Attendance Trend</h3>
-            <ResponsiveContainer width="100%" height={300}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-3 sm:p-6">
+            <h3 className="text-sm sm:text-lg font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">Weekly Attendance Trend</h3>
+            <ResponsiveContainer width="100%" height={200} className="sm:!h-[300px]">
               <LineChart data={attendanceTrends}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
@@ -346,9 +346,9 @@ const AdminAttendance = () => {
           </div>
 
           {/* Meal-wise Attendance */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Today's Meal-wise Attendance</h3>
-            <ResponsiveContainer width="100%" height={300}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-3 sm:p-6">
+            <h3 className="text-sm sm:text-lg font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">Today's Meal-wise Attendance</h3>
+            <ResponsiveContainer width="100%" height={200} className="sm:!h-[300px]">
               <BarChart data={mealWiseData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="meal_type" />
@@ -532,26 +532,26 @@ const AdminAttendance = () => {
         )}
 
         {/* Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-3 sm:p-6 mb-4 sm:mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
             {/* Date Filter */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Date</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1 sm:mb-2">Date</label>
               <input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
               />
             </div>
 
             {/* Meal Type Filter */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Meal Type</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1 sm:mb-2">Meal</label>
               <select
                 value={selectedMealType}
                 onChange={(e) => setSelectedMealType(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
               >
                 <option value="all">All Meals</option>
                 <option value="breakfast">Breakfast</option>
@@ -562,34 +562,34 @@ const AdminAttendance = () => {
             </div>
 
             {/* User Filter */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">User ID</label>
+            <div className="hidden sm:block">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1 sm:mb-2">User ID</label>
               <input
                 type="text"
                 placeholder="Enter user ID"
                 value={selectedUser}
                 onChange={(e) => setSelectedUser(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
               />
             </div>
 
             {/* Search */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Search</label>
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1 sm:mb-2">Search</label>
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Search users..."
+                  placeholder="Search..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+                  className="w-full pl-8 sm:pl-10 pr-3 sm:pr-4 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                 />
-                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <FiSearch className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </div>
             </div>
 
             {/* Clear Filters */}
-            <div className="flex items-end">
+            <div className="flex items-end col-span-2 sm:col-span-1">
               <button
                 onClick={() => {
                   setSelectedDate(new Date().toISOString().split('T')[0]);
@@ -597,9 +597,9 @@ const AdminAttendance = () => {
                   setSelectedUser('');
                   setSearchTerm('');
                 }}
-                className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="w-full px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
-                Clear Filters
+                Clear
               </button>
             </div>
           </div>

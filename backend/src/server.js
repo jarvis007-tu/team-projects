@@ -74,13 +74,19 @@ class Server {
     const corsOptions = {
       origin: (origin, callback) => {
         const allowedOrigins = process.env.CORS_ORIGIN?.split(',') || ['*'];
-        if (allowedOrigins.includes('*') || allowedOrigins.includes(origin) || !origin) {
-          callback(null, true);
+        // When using credentials, we must echo the specific origin, not '*'
+        if (allowedOrigins.includes('*') || !origin) {
+          // Return the actual origin to support credentials
+          callback(null, origin || true);
+        } else if (allowedOrigins.includes(origin)) {
+          callback(null, origin);
         } else {
           callback(new Error('Not allowed by CORS'));
         }
       },
       credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
       optionsSuccessStatus: 200
     };
     this.app.use(cors(corsOptions));

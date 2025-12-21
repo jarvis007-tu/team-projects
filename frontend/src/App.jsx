@@ -30,6 +30,8 @@ const Subscription = lazy(() => import('./pages/user/Subscription'));
 const QRScanner = lazy(() => import('./pages/user/QRScanner'));
 const WeeklyMenu = lazy(() => import('./pages/user/WeeklyMenu'));
 const UserNotifications = lazy(() => import('./pages/user/Notifications'));
+const BiometricEnrollment = lazy(() => import('./pages/user/BiometricEnrollment'));
+const BiometricAttendance = lazy(() => import('./pages/user/BiometricAttendance'));
 
 function App() {
   const { isAuthenticated, user } = useAuth();
@@ -103,6 +105,8 @@ function App() {
           <Route path="scan" element={<QRScanner />} />
           <Route path="menu" element={<WeeklyMenu />} />
           <Route path="notifications" element={<UserNotifications />} />
+          <Route path="biometric-enrollment" element={<BiometricEnrollment />} />
+          <Route path="biometric-attendance" element={<BiometricAttendance />} />
         </Route>
         
         {/* Additional User Routes with simpler path */}

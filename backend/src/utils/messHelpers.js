@@ -1,4 +1,5 @@
 const logger = require('./logger');
+const moment = require('moment-timezone');
 
 /**
  * Add mess filter to query based on user role
@@ -138,11 +139,37 @@ async function getUserMess(Mess, user, requestedMessId = null) {
   return validateMessAccess(Mess, messId, user);
 }
 
+/**
+ * Get current meal type based on time
+ * @param {Object} mess - Optional mess object with meal_timings
+ * @returns {String|null} 'breakfast', 'lunch', 'dinner', or null
+ */
+function getCurrentMealType(mess = null) {
+  const now = moment();
+  const currentTime = now.format('HH:mm');
+
+  // Use mess-specific timings if available, otherwise use defaults
+  const mealTimings = mess?.meal_timings || {
+    breakfast: { start: '07:00', end: '10:00' },
+    lunch: { start: '12:00', end: '15:00' },
+    dinner: { start: '19:00', end: '22:00' }
+  };
+
+  for (const [mealType, timings] of Object.entries(mealTimings)) {
+    if (currentTime >= timings.start && currentTime <= timings.end) {
+      return mealType;
+    }
+  }
+
+  return null;
+}
+
 module.exports = {
   addMessFilter,
   canAccessMess,
   getMessIdForCreation,
   buildMessMatchStage,
   validateMessAccess,
-  getUserMess
+  getUserMess,
+  getCurrentMealType
 };

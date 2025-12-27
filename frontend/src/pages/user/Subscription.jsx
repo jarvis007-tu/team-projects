@@ -133,11 +133,11 @@ const Subscription = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">My Subscription</h1>
-        <p className="text-gray-600 dark:text-gray-400">View your mess subscription details</p>
+      <div className="text-center px-2">
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white mb-1 sm:mb-2">My Subscription</h1>
+        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">View your mess subscription details</p>
       </div>
 
       {/* Current Subscription */}
@@ -148,83 +148,83 @@ const Subscription = () => {
             subscriptionStatus.status === 'expiring' ? 'from-yellow-500 to-yellow-600' :
             subscriptionStatus.status === 'pending' ? 'from-yellow-500 to-yellow-600' :
             'from-red-500 to-red-600'
-          } p-6 text-white`}>
-            <div className="flex items-center justify-between mb-4">
+          } p-4 sm:p-6 text-white`}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <div>
-                <h2 className="text-2xl font-bold mb-1 capitalize">{currentSubscription.plan_type} Plan</h2>
-                <p className="text-white/90">Your current subscription plan</p>
+                <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-0.5 sm:mb-1 capitalize">{currentSubscription.plan_type} Plan</h2>
+                <p className="text-white/90 text-sm sm:text-base">Your current subscription</p>
               </div>
-              <div className="px-4 py-2 bg-white/20 rounded-full flex items-center">
-                <CheckCircleIcon className="w-5 h-5 mr-2" />
-                <span className="font-semibold capitalize">{subscriptionStatus.status}</span>
+              <div className="px-3 py-1.5 sm:px-4 sm:py-2 bg-white/20 rounded-full flex items-center w-fit">
+                <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5 mr-1.5 sm:mr-2" />
+                <span className="font-semibold capitalize text-sm sm:text-base">{subscriptionStatus.status}</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-4 sm:mt-6">
               <div>
-                <p className="text-white/80 text-sm mb-1">Started On</p>
-                <p className="text-xl font-semibold">
+                <p className="text-white/80 text-xs sm:text-sm mb-0.5 sm:mb-1">Started</p>
+                <p className="text-sm sm:text-base lg:text-xl font-semibold">
                   {formatDate(currentSubscription.start_date)}
                 </p>
               </div>
               <div>
-                <p className="text-white/80 text-sm mb-1">Expires On</p>
-                <p className="text-xl font-semibold">
+                <p className="text-white/80 text-xs sm:text-sm mb-0.5 sm:mb-1">Expires</p>
+                <p className="text-sm sm:text-base lg:text-xl font-semibold">
                   {formatDate(currentSubscription.end_date)}
                 </p>
               </div>
               <div>
-                <p className="text-white/80 text-sm mb-1">Days Remaining</p>
-                <p className="text-xl font-semibold">
-                  {daysRemaining > 0 ? `${daysRemaining} days` : 'Expired'}
+                <p className="text-white/80 text-xs sm:text-sm mb-0.5 sm:mb-1">Days Left</p>
+                <p className="text-sm sm:text-base lg:text-xl font-semibold">
+                  {daysRemaining > 0 ? `${daysRemaining}` : 'Expired'}
                 </p>
               </div>
               <div>
-                <p className="text-white/80 text-sm mb-1">Food Preference</p>
-                <p className="text-xl font-semibold">
+                <p className="text-white/80 text-xs sm:text-sm mb-0.5 sm:mb-1">Food Type</p>
+                <p className="text-sm sm:text-base lg:text-xl font-semibold">
                   {getMealTypeLabel(currentSubscription.sub_type)}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Amount Paid</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">₹{currentSubscription.total_amount}</p>
+          <div className="p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4">
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-0.5 sm:mb-1">Amount Paid</p>
+                <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">₹{currentSubscription.total_amount}</p>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Payment Status</p>
-                <p className={`text-lg font-semibold capitalize ${
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4">
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-0.5 sm:mb-1">Payment</p>
+                <p className={`text-base sm:text-lg font-semibold capitalize ${
                   currentSubscription.payment_status === 'paid' ? 'text-green-600' : 'text-yellow-600'
                 }`}>
                   {currentSubscription.payment_status || 'Paid'}
                 </p>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Meals Included</p>
-                <div className="flex gap-2 flex-wrap">
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4">
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-0.5 sm:mb-1">Meals</p>
+                <div className="flex gap-1.5 sm:gap-2 flex-wrap">
                   {currentSubscription.meals_included?.breakfast && (
-                    <span className="px-2 py-1 bg-primary-100 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 text-xs rounded-full">Breakfast</span>
+                    <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-primary-100 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 text-xs rounded-full">B</span>
                   )}
                   {currentSubscription.meals_included?.lunch && (
-                    <span className="px-2 py-1 bg-primary-100 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 text-xs rounded-full">Lunch</span>
+                    <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-primary-100 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 text-xs rounded-full">L</span>
                   )}
                   {currentSubscription.meals_included?.dinner && (
-                    <span className="px-2 py-1 bg-primary-100 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 text-xs rounded-full">Dinner</span>
+                    <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-primary-100 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 text-xs rounded-full">D</span>
                   )}
                 </div>
               </div>
             </div>
 
             {/* Info notice */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 sm:p-4">
               <div className="flex items-start">
-                <InformationCircleIcon className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-3 mt-0.5 flex-shrink-0" />
+                <InformationCircleIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400 mr-2 sm:mr-3 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm text-blue-800 dark:text-blue-200">
-                    To renew, upgrade, or make changes to your subscription, please contact the mess administrator.
+                  <p className="text-xs sm:text-sm text-blue-800 dark:text-blue-200">
+                    Contact mess admin to renew or modify your subscription.
                   </p>
                 </div>
               </div>
@@ -232,13 +232,13 @@ const Subscription = () => {
           </div>
         </div>
       ) : (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-6">
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 sm:p-6">
           <div className="flex items-start">
-            <ExclamationTriangleIcon className="w-6 h-6 text-yellow-600 dark:text-yellow-400 mr-3 flex-shrink-0" />
+            <ExclamationTriangleIcon className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600 dark:text-yellow-400 mr-2 sm:mr-3 flex-shrink-0" />
             <div>
-              <h3 className="text-lg font-semibold text-yellow-900 dark:text-yellow-100">No Active Subscription</h3>
-              <p className="text-yellow-700 dark:text-yellow-300 mt-1">
-                You don't have an active subscription. Please contact the mess administrator to subscribe to the mess services.
+              <h3 className="text-base sm:text-lg font-semibold text-yellow-900 dark:text-yellow-100">No Active Subscription</h3>
+              <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                Contact the mess admin to subscribe.
               </p>
             </div>
           </div>
@@ -247,42 +247,42 @@ const Subscription = () => {
 
       {/* Mess Contact Information */}
       {messInfo && (
-        <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-6">
-          <div className="flex items-center mb-4">
-            <BuildingOfficeIcon className="w-6 h-6 text-primary-600 dark:text-primary-400 mr-2" />
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Mess Contact Information</h3>
+        <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-4 sm:p-6">
+          <div className="flex items-center mb-3 sm:mb-4">
+            <BuildingOfficeIcon className="w-5 h-5 sm:w-6 sm:h-6 text-primary-600 dark:text-primary-400 mr-2" />
+            <h3 className="text-base sm:text-lg lg:text-xl font-semibold text-gray-900 dark:text-white">Mess Contact</h3>
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Contact your mess administrator for subscription inquiries, renewals, or any other assistance.
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-3 sm:mb-4">
+            Contact admin for subscription inquiries or assistance.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-              <div className="flex items-center mb-2">
-                <BuildingOfficeIcon className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Mess Name</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4">
+              <div className="flex items-center mb-1 sm:mb-2">
+                <BuildingOfficeIcon className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500 dark:text-gray-400 mr-1.5 sm:mr-2" />
+                <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">Mess</p>
               </div>
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">{messInfo.name || 'N/A'}</p>
+              <p className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900 dark:text-white truncate">{messInfo.name || 'N/A'}</p>
             </div>
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-              <div className="flex items-center mb-2">
-                <EnvelopeIcon className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</p>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4">
+              <div className="flex items-center mb-1 sm:mb-2">
+                <EnvelopeIcon className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500 dark:text-gray-400 mr-1.5 sm:mr-2" />
+                <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">Email</p>
               </div>
               <a
                 href={`mailto:${messInfo.contact_email || ''}`}
-                className="text-lg font-semibold text-primary-600 dark:text-primary-400 hover:underline break-all"
+                className="text-sm sm:text-base lg:text-lg font-semibold text-primary-600 dark:text-primary-400 hover:underline break-all"
               >
                 {messInfo.contact_email || 'N/A'}
               </a>
             </div>
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-              <div className="flex items-center mb-2">
-                <PhoneIcon className="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2" />
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</p>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4">
+              <div className="flex items-center mb-1 sm:mb-2">
+                <PhoneIcon className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500 dark:text-gray-400 mr-1.5 sm:mr-2" />
+                <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">Phone</p>
               </div>
               <a
                 href={`tel:${messInfo.contact_phone || ''}`}
-                className="text-lg font-semibold text-primary-600 dark:text-primary-400 hover:underline"
+                className="text-sm sm:text-base lg:text-lg font-semibold text-primary-600 dark:text-primary-400 hover:underline"
               >
                 {messInfo.contact_phone || 'N/A'}
               </a>
@@ -292,55 +292,84 @@ const Subscription = () => {
       )}
 
       {/* Subscription History */}
-      <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-6">
-        <div className="flex items-center mb-4">
-          <ClockIcon className="w-6 h-6 text-gray-600 dark:text-gray-400 mr-2" />
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Subscription History</h3>
+      <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-4 sm:p-6">
+        <div className="flex items-center mb-3 sm:mb-4">
+          <ClockIcon className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600 dark:text-gray-400 mr-2" />
+          <h3 className="text-base sm:text-lg lg:text-xl font-semibold text-gray-900 dark:text-white">History</h3>
         </div>
 
         {subscriptionHistory.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-dark-border">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Plan</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Duration</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-dark-border">
-                {subscriptionHistory.map((subscription) => (
-                  <tr key={subscription.subscription_id}>
-                    <td className="px-4 py-3">
-                      <span className="font-medium text-gray-900 dark:text-white capitalize">{subscription.plan_type}</span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                      {formatDate(subscription.start_date)} - {formatDate(subscription.end_date)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="font-semibold text-gray-900 dark:text-white">₹{subscription.total_amount}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        subscription.status === 'active'
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
-                          : subscription.status === 'expired'
-                          ? 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
-                          : subscription.status === 'pending'
-                          ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
-                      }`}>
-                        {subscription.status}
-                      </span>
-                    </td>
+          <>
+            {/* Mobile view - cards */}
+            <div className="sm:hidden space-y-3">
+              {subscriptionHistory.map((subscription) => (
+                <div key={subscription.subscription_id} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-gray-900 dark:text-white capitalize text-sm">{subscription.plan_type}</span>
+                    <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
+                      subscription.status === 'active'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
+                        : subscription.status === 'expired'
+                        ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                        : subscription.status === 'pending'
+                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300'
+                        : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
+                    }`}>
+                      {subscription.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+                    <span>{formatDate(subscription.start_date)} - {formatDate(subscription.end_date)}</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">₹{subscription.total_amount}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop view - table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-dark-border">
+                  <tr>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Plan</th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Duration</th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-dark-border">
+                  {subscriptionHistory.map((subscription) => (
+                    <tr key={subscription.subscription_id}>
+                      <td className="px-3 sm:px-4 py-2 sm:py-3">
+                        <span className="font-medium text-gray-900 dark:text-white capitalize text-sm">{subscription.plan_type}</span>
+                      </td>
+                      <td className="px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                        {formatDate(subscription.start_date)} - {formatDate(subscription.end_date)}
+                      </td>
+                      <td className="px-3 sm:px-4 py-2 sm:py-3">
+                        <span className="font-semibold text-gray-900 dark:text-white text-sm">₹{subscription.total_amount}</span>
+                      </td>
+                      <td className="px-3 sm:px-4 py-2 sm:py-3">
+                        <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
+                          subscription.status === 'active'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
+                            : subscription.status === 'expired'
+                            ? 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+                            : subscription.status === 'pending'
+                            ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300'
+                            : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
+                        }`}>
+                          {subscription.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         ) : (
-          <p className="text-gray-500 dark:text-gray-400 text-center py-8">No subscription history available</p>
+          <p className="text-gray-500 dark:text-gray-400 text-center py-6 sm:py-8 text-sm">No subscription history</p>
         )}
       </div>
     </div>

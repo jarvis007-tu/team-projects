@@ -101,17 +101,22 @@ const BiometricAttendance = () => {
         location
       );
 
+      // result is { success, message, data } from backend
+      // The actual attendance data is in result.data
       setAttendanceResult({
         success: true,
-        data: result.data
+        data: result.data || result
       });
 
       toast.success(result.message || 'Attendance marked successfully!');
       fetchRecentAttendance();
     } catch (error) {
       console.error('Attendance error:', error);
+      console.error('Error response:', error.response);
+      console.error('Error status:', error.response?.status);
 
       const errorMessage = error.response?.data?.message || error.message || 'Failed to mark attendance';
+      const statusCode = error.response?.status;
 
       // Handle specific errors
       if (error.name === 'NotAllowedError') {
@@ -123,6 +128,13 @@ const BiometricAttendance = () => {
         setAttendanceResult({
           success: false,
           isNoMealTime: true,
+          error: errorMessage
+        });
+      } else if (statusCode === 409 || errorMessage.toLowerCase().includes('already marked') || errorMessage.toLowerCase().includes('already attended')) {
+        // Show friendly UI for already marked attendance (409 Conflict)
+        setAttendanceResult({
+          success: false,
+          isAlreadyMarked: true,
           error: errorMessage
         });
       } else {
@@ -251,7 +263,12 @@ const BiometricAttendance = () => {
             <div className="space-y-4 sm:space-y-6">
               {/* Result Display */}
               {attendanceResult && (
-                <div className={`p-3 sm:p-4 rounded-lg sm:rounded-xl ${attendanceResult.success ? 'bg-green-50 dark:bg-green-900/20' : attendanceResult.isNoMealTime ? 'bg-orange-50 dark:bg-orange-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+                <div className={`p-3 sm:p-4 rounded-lg sm:rounded-xl ${
+                  attendanceResult.success ? 'bg-green-50 dark:bg-green-900/20' :
+                  attendanceResult.isNoMealTime ? 'bg-orange-50 dark:bg-orange-900/20' :
+                  attendanceResult.isAlreadyMarked ? 'bg-blue-50 dark:bg-blue-900/20' :
+                  'bg-red-50 dark:bg-red-900/20'
+                }`}>
                   {attendanceResult.success ? (
                     <div className="flex items-center gap-3 sm:gap-4">
                       <FiCheckCircle className="w-10 h-10 sm:w-12 sm:h-12 text-green-600 flex-shrink-0" />
@@ -264,6 +281,18 @@ const BiometricAttendance = () => {
                         </p>
                         <p className="text-[10px] sm:text-xs text-green-500 mt-1">
                           {attendanceResult.data?.scan_time && format(new Date(attendanceResult.data.scan_time), 'h:mm a')}
+                        </p>
+                      </div>
+                    </div>
+                  ) : attendanceResult.isAlreadyMarked ? (
+                    <div className="flex items-center gap-3 sm:gap-4">
+                      <FiCheckCircle className="w-10 h-10 sm:w-12 sm:h-12 text-blue-600 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm sm:text-base font-semibold text-blue-700 dark:text-blue-400">
+                          Already Marked!
+                        </p>
+                        <p className="text-xs sm:text-sm text-blue-600 dark:text-blue-500">
+                          You've already marked attendance for this meal today.
                         </p>
                       </div>
                     </div>

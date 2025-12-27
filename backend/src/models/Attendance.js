@@ -39,7 +39,7 @@ const AttendanceSchema = new mongoose.Schema({
   },
   qr_code: {
     type: String,
-    required: [true, 'QR code is required']
+    required: false // Optional for biometric attendance
   },
   geo_location: {
     type: Object,
@@ -73,7 +73,7 @@ const AttendanceSchema = new mongoose.Schema({
   scan_method: {
     type: String,
     enum: {
-      values: ['qr', 'manual', 'face', 'nfc'],
+      values: ['qr', 'manual', 'face', 'nfc', 'biometric', 'fingerprint'],
       message: '{VALUE} is not a valid scan method'
     },
     default: 'qr'

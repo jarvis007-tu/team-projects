@@ -376,7 +376,14 @@ class BiometricController {
       }
 
       // Check if meal is included in subscription
-      if (!subscription.meals_included.includes(mealType)) {
+      // meals_included can be an object like { breakfast: true, lunch: true, dinner: false }
+      // or an array like ['breakfast', 'lunch']
+      const mealsIncluded = subscription.meals_included;
+      const isMealIncluded = Array.isArray(mealsIncluded)
+        ? mealsIncluded.includes(mealType)
+        : mealsIncluded && mealsIncluded[mealType] === true;
+
+      if (!isMealIncluded) {
         throw new AppError(`${mealType} is not included in your subscription`, 403);
       }
 

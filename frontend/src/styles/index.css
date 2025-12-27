@@ -5,11 +5,30 @@
 @layer base {
   * {
     @apply border-gray-200 dark:border-dark-border;
+    -webkit-tap-highlight-color: transparent;
   }
-  
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   body {
     @apply bg-gray-50 text-gray-900 dark:bg-dark-bg dark:text-dark-text;
     font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  /* Safe area for notched devices (iPhone X+) */
+  .safe-area-inset {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 
   /* Custom scrollbar */

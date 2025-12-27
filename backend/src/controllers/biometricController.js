@@ -72,7 +72,7 @@ class BiometricController {
         rpId = req.hostname || 'localhost';
       }
 
-      // WebAuthn registration options
+      // WebAuthn registration options - iOS/Safari compatible
       const registrationOptions = {
         challenge,
         rp: {
@@ -85,16 +85,16 @@ class BiometricController {
           displayName: user.full_name
         },
         pubKeyCredParams: [
-          { alg: -7, type: 'public-key' },   // ES256 (preferred)
+          { alg: -7, type: 'public-key' },   // ES256 (preferred, works on all platforms)
           { alg: -257, type: 'public-key' }  // RS256 (fallback)
         ],
         timeout: 60000, // 60 seconds
         attestation: 'none', // We don't need attestation for our use case
         authenticatorSelection: {
-          // Allow both platform (fingerprint) and cross-platform (security keys) authenticators
-          // 'platform' restricts to built-in only, removing it allows both
-          userVerification: 'preferred',       // Prefer biometric but allow PIN/password fallback
-          residentKey: 'preferred'
+          authenticatorAttachment: 'platform', // Required for iOS - use built-in biometric
+          userVerification: 'required',        // Required for iOS biometric
+          residentKey: 'discouraged',          // Better iOS compatibility
+          requireResidentKey: false            // Explicit for older browsers
         },
         excludeCredentials: [] // No existing credentials to exclude
       };
@@ -121,6 +121,7 @@ class BiometricController {
       const {
         credential_id,
         public_key,
+        attestation_object,
         authenticator_data,
         client_data_json,
         device_info
@@ -172,11 +173,13 @@ class BiometricController {
       }
 
       // Create biometric record
+      // Store attestation_object for iOS devices that don't provide getPublicKey()
       const biometric = await Biometric.create({
         user_id: userId,
         biometric_type: 'webauthn',
         credential_id,
         public_key,
+        attestation_object: attestation_object || null, // Store for iOS compatibility
         device_id: device_info?.device_id || req.headers['x-device-id'] || 'unknown',
         authenticator_info: {
           aaguid: authenticator_data?.aaguid,
@@ -373,7 +376,14 @@ class BiometricController {
       }
 
       // Check if meal is included in subscription
-      if (!subscription.meals_included.includes(mealType)) {
+      // meals_included can be an object like { breakfast: true, lunch: true, dinner: false }
+      // or an array like ['breakfast', 'lunch']
+      const mealsIncluded = subscription.meals_included;
+      const isMealIncluded = Array.isArray(mealsIncluded)
+        ? mealsIncluded.includes(mealType)
+        : mealsIncluded && mealsIncluded[mealType] === true;
+
+      if (!isMealIncluded) {
         throw new AppError(`${mealType} is not included in your subscription`, 403);
       }
 

@@ -129,26 +129,30 @@ const UserLayout = () => {
       {/* Main content */}
       <div className="md:pl-72">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 bg-white dark:bg-dark-card border-b dark:border-dark-border">
-          <div className="flex items-center justify-between h-16 px-4 sm:px-6">
+        <header className="sticky top-0 z-30 bg-white dark:bg-dark-card border-b dark:border-dark-border safe-area-inset">
+          <div className="flex items-center justify-between h-14 sm:h-16 px-2 sm:px-4">
+            {/* Left: Menu button */}
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 md:hidden"
+              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 md:hidden flex-shrink-0"
             >
-              <Bars3Icon className="h-6 w-6 dark:text-gray-400" />
+              <Bars3Icon className="h-5 w-5 sm:h-6 sm:w-6 dark:text-gray-400" />
             </button>
 
-            <div className="flex-1 px-4 md:px-0">
-              <h2 className="text-lg font-semibold dark:text-white">
-                Welcome back, {user?.full_name?.split(' ')[0] || 'User'}
+            {/* Center: Welcome text - hidden on very small screens */}
+            <div className="flex-1 min-w-0 px-2 sm:px-4 md:px-0">
+              <h2 className="text-sm sm:text-lg font-semibold dark:text-white truncate">
+                <span className="hidden xs:inline">Welcome, </span>
+                {user?.full_name?.split(' ')[0] || 'User'}
               </h2>
             </div>
 
-            <div className="flex items-center space-x-2">
+            {/* Right: Action buttons */}
+            <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
               {/* Theme Toggle */}
               <button
                 onClick={toggleTheme}
-                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="p-1.5 sm:p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 {theme === 'dark' ? (
                   <SunIcon className="h-5 w-5 text-yellow-500" />
@@ -157,19 +161,19 @@ const UserLayout = () => {
                 )}
               </button>
 
-              {/* QR Scanner */}
+              {/* QR Scanner - hidden on mobile, visible on sm+ */}
               <NavLink
                 to="/user/scan"
-                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 relative"
+                className="hidden sm:flex p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 relative"
                 title="Scan QR Code"
               >
                 <QrCodeIcon className="h-5 w-5 dark:text-gray-400" />
               </NavLink>
 
-              {/* Biometric Attendance */}
+              {/* Biometric - hidden on mobile, visible on sm+ */}
               <NavLink
                 to="/user/biometric-attendance"
-                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 relative"
+                className="hidden sm:flex p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 relative"
                 title="Biometric Attendance"
               >
                 <FingerPrintIcon className="h-5 w-5 dark:text-gray-400" />
@@ -178,22 +182,22 @@ const UserLayout = () => {
               {/* Notifications */}
               <NavLink
                 to="/user/notifications"
-                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 relative"
+                className="p-1.5 sm:p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 relative"
               >
                 <BellIcon className="h-5 w-5 dark:text-gray-400" />
-                <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+                <span className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 h-2 w-2 bg-red-500 rounded-full"></span>
               </NavLink>
 
               {/* Profile dropdown */}
               <div className="relative group">
-                <button className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
-                  <UserCircleIcon className="h-8 w-8 text-gray-400" />
+                <button className="flex items-center p-1 sm:p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
+                  <UserCircleIcon className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400" />
                 </button>
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-dark-card rounded-lg shadow-lg border dark:border-dark-border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-dark-card rounded-lg shadow-lg border dark:border-dark-border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                   <div className="py-1">
                     <div className="px-4 py-2 border-b dark:border-dark-border">
-                      <p className="text-sm font-medium dark:text-white">{user?.full_name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
+                      <p className="text-sm font-medium dark:text-white truncate">{user?.full_name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.email}</p>
                     </div>
                     <NavLink
                       to="/user/profile"

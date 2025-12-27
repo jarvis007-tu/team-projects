@@ -39,6 +39,12 @@ const BiometricSchema = new mongoose.Schema({
     required: true
   },
 
+  // For iOS Safari - stores attestation object (since getPublicKey() not available)
+  attestation_object: {
+    type: String,
+    default: null
+  },
+
   // Counter to prevent replay attacks
   sign_count: {
     type: Number,

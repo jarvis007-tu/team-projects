@@ -9,8 +9,14 @@ import api from './api.js';
 const biometricService = {
   /**
    * Check if WebAuthn is supported in the browser
+   * Works on both iOS Safari and Android Chrome
    */
   isWebAuthnSupported: () => {
+    // Check for secure context (HTTPS or localhost)
+    if (!window.isSecureContext) {
+      console.warn('WebAuthn requires a secure context (HTTPS)');
+      return false;
+    }
     return !!(
       window.PublicKeyCredential &&
       typeof window.PublicKeyCredential === 'function'
@@ -18,17 +24,41 @@ const biometricService = {
   },
 
   /**
-   * Check if platform authenticator (built-in fingerprint) is available
+   * Check if platform authenticator (built-in fingerprint/Face ID) is available
+   * Works on both iOS (Face ID/Touch ID) and Android (Fingerprint)
    */
   isPlatformAuthenticatorAvailable: async () => {
     if (!biometricService.isWebAuthnSupported()) {
       return false;
     }
     try {
-      return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-    } catch {
+      // This method is supported on both iOS Safari and Android Chrome
+      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      console.log('Platform authenticator available:', available, 'Platform:', biometricService.getPlatform());
+      return available;
+    } catch (error) {
+      console.error('Error checking platform authenticator:', error);
       return false;
     }
+  },
+
+  /**
+   * Get detailed device biometric capabilities
+   */
+  getBiometricCapabilities: async () => {
+    const platform = biometricService.getPlatform();
+    const isSupported = biometricService.isWebAuthnSupported();
+    const isPlatformAvailable = isSupported ? await biometricService.isPlatformAuthenticatorAvailable() : false;
+
+    return {
+      platform,
+      isSecureContext: window.isSecureContext,
+      webAuthnSupported: isSupported,
+      platformAuthenticatorAvailable: isPlatformAvailable,
+      biometricType: platform === 'ios' ? 'Face ID / Touch ID' :
+                     platform === 'android' ? 'Fingerprint' :
+                     'Biometric'
+    };
   },
 
   // ==================== Enrollment APIs ====================
@@ -104,17 +134,27 @@ const biometricService = {
 
   /**
    * Enroll fingerprint - Complete enrollment flow
+   * Works on both iOS (Face ID/Touch ID) and Android (Fingerprint)
    * @returns {Promise<Object>} Enrollment result
    */
   enrollFingerprint: async () => {
+    const platform = biometricService.getPlatform();
+    console.log('Starting biometric enrollment on platform:', platform);
+
+    // Check secure context
+    if (!window.isSecureContext) {
+      throw new Error('Biometric enrollment requires HTTPS. Please use a secure connection.');
+    }
+
     // Check support
     if (!biometricService.isWebAuthnSupported()) {
-      throw new Error('WebAuthn is not supported in this browser');
+      throw new Error('Biometric authentication is not supported in this browser. Please use Safari on iOS or Chrome on Android.');
     }
 
     const isPlatformAvailable = await biometricService.isPlatformAuthenticatorAvailable();
     if (!isPlatformAvailable) {
-      throw new Error('Fingerprint sensor not available on this device');
+      const biometricType = platform === 'ios' ? 'Face ID/Touch ID' : 'Fingerprint sensor';
+      throw new Error(`${biometricType} is not available on this device. Please ensure it is enabled in your device settings.`);
     }
 
     // Step 1: Get registration options from server
@@ -155,23 +195,66 @@ const biometricService = {
     };
 
     // Step 2: Create credential using WebAuthn API
-    const credential = await navigator.credentials.create({
-      publicKey: publicKeyOptions
-    });
+    let credential;
+    try {
+      credential = await navigator.credentials.create({
+        publicKey: publicKeyOptions
+      });
+    } catch (error) {
+      console.error('WebAuthn create credential error:', error);
+      // Provide user-friendly error messages
+      if (error.name === 'NotAllowedError') {
+        throw new Error('Biometric enrollment was cancelled or not allowed. Please try again.');
+      } else if (error.name === 'SecurityError') {
+        throw new Error('Security error during enrollment. Make sure you are using HTTPS.');
+      } else if (error.name === 'InvalidStateError') {
+        throw new Error('A biometric is already registered. Please revoke it first.');
+      } else if (error.name === 'NotSupportedError') {
+        throw new Error('This authenticator is not supported. Please try a different device.');
+      }
+      throw error;
+    }
 
     // Step 3: Extract and encode credential data
+    // Note: getPublicKey() and getAuthenticatorData() are not available on iOS Safari
+    // Use attestationObject instead which contains all the data
+    const attestationObject = credential.response.attestationObject;
+
+    // Extract public key - use getPublicKey if available (Chrome/Android), otherwise use attestationObject
+    let publicKey;
+    if (typeof credential.response.getPublicKey === 'function') {
+      publicKey = biometricService.bufferToBase64url(credential.response.getPublicKey());
+    } else {
+      // For iOS Safari, send the attestationObject and let backend extract the key
+      publicKey = biometricService.bufferToBase64url(attestationObject);
+    }
+
+    // Extract authenticator data
+    let authenticatorData = { aaguid: null, signCount: 0 };
+    if (typeof credential.response.getAuthenticatorData === 'function') {
+      const authData = credential.response.getAuthenticatorData();
+      authenticatorData = {
+        aaguid: biometricService.extractAAGUID(authData),
+        signCount: biometricService.extractSignCount(authData)
+      };
+    }
+
+    // Get transports - fallback for iOS
+    let transports = ['internal'];
+    if (typeof credential.response.getTransports === 'function') {
+      transports = credential.response.getTransports() || ['internal'];
+    }
+
     const credentialData = {
       credential_id: biometricService.bufferToBase64url(credential.rawId),
-      public_key: biometricService.bufferToBase64url(credential.response.getPublicKey()),
-      authenticator_data: {
-        aaguid: biometricService.extractAAGUID(credential.response.getAuthenticatorData()),
-        signCount: biometricService.extractSignCount(credential.response.getAuthenticatorData())
-      },
+      public_key: publicKey,
+      attestation_object: biometricService.bufferToBase64url(attestationObject),
+      authenticator_data: authenticatorData,
       client_data_json: biometricService.bufferToBase64url(credential.response.clientDataJSON),
       device_info: {
         device_id: biometricService.getDeviceId(),
         device_type: 'platform',
-        transports: credential.response.getTransports?.() || ['internal'],
+        transports: transports,
         platform: biometricService.getPlatform()
       }
     };
@@ -184,14 +267,23 @@ const biometricService = {
 
   /**
    * Verify fingerprint and mark attendance
+   * Works on both iOS (Face ID/Touch ID) and Android (Fingerprint)
    * @param {string} userId - User ID to verify
    * @param {Object} geoLocation - Optional geolocation { latitude, longitude }
    * @returns {Promise<Object>} Attendance result
    */
   verifyFingerprintAttendance: async (userId, geoLocation = null) => {
+    const platform = biometricService.getPlatform();
+    console.log('Starting biometric verification on platform:', platform);
+
+    // Check secure context
+    if (!window.isSecureContext) {
+      throw new Error('Biometric verification requires HTTPS. Please use a secure connection.');
+    }
+
     // Check support
     if (!biometricService.isWebAuthnSupported()) {
-      throw new Error('WebAuthn is not supported in this browser');
+      throw new Error('Biometric authentication is not supported in this browser.');
     }
 
     // Step 1: Get verification options from server
@@ -218,20 +310,44 @@ const biometricService = {
     };
 
     // Step 2: Get credential using WebAuthn API
-    const assertion = await navigator.credentials.get({
-      publicKey: publicKeyOptions
-    });
+    let assertion;
+    try {
+      assertion = await navigator.credentials.get({
+        publicKey: publicKeyOptions
+      });
+    } catch (error) {
+      console.error('WebAuthn get credential error:', error);
+      // Provide user-friendly error messages
+      if (error.name === 'NotAllowedError') {
+        throw new Error('Biometric verification was cancelled or not allowed. Please try again.');
+      } else if (error.name === 'SecurityError') {
+        throw new Error('Security error during verification. Make sure you are using HTTPS.');
+      } else if (error.name === 'InvalidStateError') {
+        throw new Error('No registered biometric found. Please enroll your biometric first.');
+      }
+      throw error;
+    }
 
     // Step 3: Extract and encode assertion data
+    // authenticatorData is available on both iOS and Android
+    let signCount = 0;
+    try {
+      signCount = biometricService.extractSignCount(assertion.response.authenticatorData);
+    } catch (e) {
+      console.warn('Could not extract sign count:', e);
+    }
+
     const verificationData = {
       credential_id: biometricService.bufferToBase64url(assertion.rawId),
       authenticator_data: {
-        signCount: biometricService.extractSignCount(assertion.response.authenticatorData)
+        signCount: signCount,
+        rawAuthenticatorData: biometricService.bufferToBase64url(assertion.response.authenticatorData)
       },
       client_data_json: biometricService.bufferToBase64url(assertion.response.clientDataJSON),
       signature: biometricService.bufferToBase64url(assertion.response.signature),
       challenge: options.challenge,
-      geo_location: geoLocation
+      geo_location: geoLocation,
+      platform: platform
     };
 
     // Step 4: Send to server for verification and attendance marking

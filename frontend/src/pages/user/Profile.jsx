@@ -208,44 +208,44 @@ const Profile = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-6">
-        <div className="flex items-center justify-between">
+      <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Profile</h1>
-            <p className="text-gray-600 dark:text-gray-400">Manage your account information and preferences</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">My Profile</h1>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Manage your account info</p>
           </div>
           {!editMode ? (
             <button
               onClick={() => setEditMode(true)}
-              className="flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+              className="flex items-center justify-center w-full sm:w-auto px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors text-sm sm:text-base"
             >
               <PencilIcon className="w-4 h-4 mr-2" />
               Edit Profile
             </button>
           ) : (
-            <div className="flex space-x-3">
+            <div className="flex space-x-2 sm:space-x-3 w-full sm:w-auto">
               <button
                 onClick={() => {
                   setEditMode(false);
                   resetProfile();
                 }}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
+                className="flex-1 sm:flex-none px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300 text-sm sm:text-base"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmitProfile(onSubmitProfile)}
                 disabled={loading}
-                className="flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50"
+                className="flex-1 sm:flex-none flex items-center justify-center px-3 sm:px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50 text-sm sm:text-base"
               >
                 {loading ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                 ) : (
                   <CheckIcon className="w-4 h-4 mr-2" />
                 )}
-                Save Changes
+                Save
               </button>
             </div>
           )}
@@ -256,30 +256,30 @@ const Profile = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Profile Image Section */}
         <div className="lg:col-span-1">
-          <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-6">
+          <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-4 sm:p-6">
             <div className="text-center">
               {/* Profile Image */}
-              <div className="relative inline-block mb-4">
-                <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700">
+              <div className="relative inline-block mb-3 sm:mb-4">
+                <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700">
                   {profileImage ? (
                     <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-primary-100 dark:bg-primary-900/20">
-                      <UserCircleIcon className="w-16 h-16 text-primary-600 dark:text-primary-400" />
+                      <UserCircleIcon className="w-12 h-12 sm:w-16 sm:h-16 text-primary-600 dark:text-primary-400" />
                     </div>
                   )}
                 </div>
-                
+
                 {/* Upload Loading Overlay */}
                 {uploadingImage && (
                   <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                    <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-white"></div>
                   </div>
                 )}
-                
+
                 {/* Camera Button */}
-                <label className="absolute bottom-0 right-0 w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center cursor-pointer hover:bg-primary-600 transition-colors">
-                  <CameraIcon className="w-5 h-5 text-white" />
+                <label className="absolute bottom-0 right-0 w-8 h-8 sm:w-10 sm:h-10 bg-primary-500 rounded-full flex items-center justify-center cursor-pointer hover:bg-primary-600 transition-colors">
+                  <CameraIcon className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                   <input
                     type="file"
                     accept="image/*"
@@ -289,40 +289,40 @@ const Profile = () => {
                   />
                 </label>
               </div>
-              
+
               {/* User Info */}
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{user?.full_name}</h3>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">Student ID: {user?.user_id}</p>
-              
+              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate px-2">{user?.full_name}</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">ID: {user?.user_id}</p>
+
               {user?.status === 'active' && (
                 <div className="flex items-center justify-center mt-2 text-green-600 dark:text-green-400">
-                  <CheckIcon className="w-5 h-5 mr-1" />
-                  <span className="text-sm font-medium">Verified Account</span>
+                  <CheckIcon className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+                  <span className="text-xs sm:text-sm font-medium">Verified</span>
                 </div>
               )}
             </div>
 
             {/* Quick Stats */}
-            <div className="mt-6 pt-6 border-t dark:border-dark-border">
-              <div className="space-y-3">
+            <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t dark:border-dark-border">
+              <div className="space-y-2 sm:space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Member Since</span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Member Since</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">
                     {formatDate(user?.createdAt || user?.created_at)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Account Type</span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">
+                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Account Type</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white capitalize">
                     {user?.role === 'user' ? 'Student' : user?.role}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Subscription</span>
+                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Subscription</span>
                   {hasActiveSubscription ? (
-                    <span className="text-sm font-medium text-green-600 dark:text-green-400">Active</span>
+                    <span className="text-xs sm:text-sm font-medium text-green-600 dark:text-green-400">Active</span>
                   ) : (
-                    <span className="text-sm font-medium text-red-600 dark:text-red-400">Inactive</span>
+                    <span className="text-xs sm:text-sm font-medium text-red-600 dark:text-red-400">Inactive</span>
                   )}
                 </div>
               </div>
@@ -331,7 +331,7 @@ const Profile = () => {
             {/* Change Password Button */}
             <button
               onClick={() => setShowPasswordModal(true)}
-              className="w-full mt-6 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center justify-center text-gray-700 dark:text-gray-300"
+              className="w-full mt-4 sm:mt-6 px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center justify-center text-gray-700 dark:text-gray-300 text-sm"
             >
               <LockClosedIcon className="w-4 h-4 mr-2" />
               Change Password
@@ -341,124 +341,124 @@ const Profile = () => {
 
         {/* Profile Form */}
         <div className="lg:col-span-2">
-          <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-6">
+          <div className="bg-white dark:bg-dark-card rounded-xl border dark:border-dark-border p-4 sm:p-6">
             <form onSubmit={handleSubmitProfile(onSubmitProfile)}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 {/* Full Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <UserCircleIcon className="inline w-4 h-4 mr-1" />
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
+                    <UserCircleIcon className="inline w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
                     Full Name
                   </label>
                   <input
                     {...registerProfile('full_name')}
                     disabled={!editMode}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                   />
                   {profileErrors.full_name && (
-                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{profileErrors.full_name.message}</p>
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">{profileErrors.full_name.message}</p>
                   )}
                 </div>
 
                 {/* Email */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <EnvelopeIcon className="inline w-4 h-4 mr-1" />
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
+                    <EnvelopeIcon className="inline w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
                     Email
                   </label>
                   <input
                     {...registerProfile('email')}
                     type="email"
                     disabled={!editMode}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                   />
                   {profileErrors.email && (
-                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{profileErrors.email.message}</p>
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">{profileErrors.email.message}</p>
                   )}
                 </div>
 
                 {/* Phone */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <PhoneIcon className="inline w-4 h-4 mr-1" />
-                    Phone Number
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
+                    <PhoneIcon className="inline w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
+                    Phone
                   </label>
                   <input
                     {...registerProfile('phone')}
                     disabled={!editMode}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                   />
                   {profileErrors.phone && (
-                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{profileErrors.phone.message}</p>
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">{profileErrors.phone.message}</p>
                   )}
                 </div>
 
                 {/* Room Number */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <MapPinIcon className="inline w-4 h-4 mr-1" />
-                    Room Number
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
+                    <MapPinIcon className="inline w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
+                    Room No.
                   </label>
                   <input
                     {...registerProfile('room_number')}
                     disabled={!editMode}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                   />
                   {profileErrors.room_number && (
-                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{profileErrors.room_number.message}</p>
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">{profileErrors.room_number.message}</p>
                   )}
                 </div>
 
                 {/* Hostel Block */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <MapPinIcon className="inline w-4 h-4 mr-1" />
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
+                    <MapPinIcon className="inline w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
                     Hostel Block
                   </label>
                   <input
                     {...registerProfile('hostel_block')}
                     disabled={!editMode}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                   />
                   {profileErrors.hostel_block && (
-                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{profileErrors.hostel_block.message}</p>
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">{profileErrors.hostel_block.message}</p>
                   )}
                 </div>
 
                 {/* Year of Study */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <AcademicCapIcon className="inline w-4 h-4 mr-1" />
-                    Year of Study
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
+                    <AcademicCapIcon className="inline w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
+                    Year
                   </label>
                   <select
                     {...registerProfile('year_of_study')}
                     disabled={!editMode}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                   >
-                    <option value="">Select Year</option>
+                    <option value="">Select</option>
                     <option value="1">1st Year</option>
                     <option value="2">2nd Year</option>
                     <option value="3">3rd Year</option>
                     <option value="4">4th Year</option>
-                    <option value="pg">Post Graduate</option>
+                    <option value="pg">PG</option>
                   </select>
                   {profileErrors.year_of_study && (
-                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{profileErrors.year_of_study.message}</p>
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">{profileErrors.year_of_study.message}</p>
                   )}
                 </div>
 
                 {/* Dietary Preferences */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
                     Dietary Preferences
                   </label>
                   <textarea
                     {...registerProfile('dietary_preferences')}
                     disabled={!editMode}
-                    rows="3"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                    placeholder="Any allergies or dietary restrictions..."
+                    rows="2"
+                    className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    placeholder="Any allergies or restrictions..."
                   />
                 </div>
               </div>
@@ -469,71 +469,71 @@ const Profile = () => {
 
       {/* Password Change Modal */}
       {showPasswordModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-dark-card rounded-xl shadow-xl p-6 w-full max-w-md">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Change Password</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-dark-card rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">Change Password</h3>
             <form onSubmit={handleSubmitPassword(onSubmitPassword)}>
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
                     Current Password
                   </label>
                   <input
                     {...registerPassword('current_password')}
                     type="password"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                   />
                   {passwordErrors.current_password && (
-                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{passwordErrors.current_password.message}</p>
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">{passwordErrors.current_password.message}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
                     New Password
                   </label>
                   <input
                     {...registerPassword('new_password')}
                     type="password"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                   />
                   {passwordErrors.new_password && (
-                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{passwordErrors.new_password.message}</p>
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">{passwordErrors.new_password.message}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Confirm New Password
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 sm:mb-2">
+                    Confirm Password
                   </label>
                   <input
                     {...registerPassword('confirm_password')}
                     type="password"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                   />
                   {passwordErrors.confirm_password && (
-                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{passwordErrors.confirm_password.message}</p>
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">{passwordErrors.confirm_password.message}</p>
                   )}
                 </div>
               </div>
 
-              <div className="flex space-x-3 mt-6">
+              <div className="flex space-x-2 sm:space-x-3 mt-4 sm:mt-6">
                 <button
                   type="button"
                   onClick={() => {
                     setShowPasswordModal(false);
                     resetPassword();
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
+                  className="flex-1 px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50"
+                  className="flex-1 px-3 sm:px-4 py-2 text-sm bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50"
                 >
-                  {loading ? 'Changing...' : 'Change Password'}
+                  {loading ? 'Changing...' : 'Change'}
                 </button>
               </div>
             </form>
